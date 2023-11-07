@@ -2,6 +2,7 @@ pub mod mem;
 
 #[cfg(feature = "smp")]
 pub mod mp;
+pub mod gpio;
 
 #[cfg(feature = "irq")]
 pub mod irq {
@@ -38,6 +39,7 @@ pub(crate) unsafe extern "C" fn rust_entry(cpu_id: usize, dtb: usize) {
     crate::arch::write_page_table_root0(0.into()); // disable low address access
     crate::cpu::init_primary(cpu_id);
     super::aarch64_common::pl011::init_early();
+    super::gpio::init_early();
     super::aarch64_common::generic_timer::init_early();
     rust_main(cpu_id, dtb);
 }
