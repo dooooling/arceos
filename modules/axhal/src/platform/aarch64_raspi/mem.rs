@@ -13,34 +13,60 @@ pub(crate) fn platform_regions() -> impl Iterator<Item = MemRegion> {
     .chain(crate::mem::default_mmio_regions())
 }
 
+#[link_section = ".data.boot_page_table"]
+static mut BOOT_PT_L2: [A64PTE; 512] = [A64PTE::empty(); 512];
+
 pub(crate) unsafe fn init_boot_page_table(
     boot_pt_l0: &mut [A64PTE; 512],
     boot_pt_l1: &mut [A64PTE; 512],
 ) {
     // 0x0000_0000_0000 ~ 0x0080_0000_0000, table
     boot_pt_l0[0] = A64PTE::new_table(PhysAddr::from(boot_pt_l1.as_ptr() as usize));
-    // 0x0000_0000_0000..0x0000_4000_0000, 1G block, device memory
-    boot_pt_l1[0] = A64PTE::new_page(
-        PhysAddr::from(0),
-        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
-        true,
-    );
-    // 0x0000_4000_0000..0x0000_8000_0000, 1G block, normal memory
+    // // 0x0000_0000_0000..0x0000_4000_0000, 1G block, device memory
+    // boot_pt_l1[0] = A64PTE::new_page(
+    //     PhysAddr::from(0),
+    //     MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
+    //     true,
+    // );
+    // // 0x0000_4000_0000..0x0000_8000_0000, 1G block, normal memory
+    // boot_pt_l1[1] = A64PTE::new_page(
+    //     PhysAddr::from(0x4000_0000),
+    //     MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
+    //     true,
+    // );
+    // // 0x0000_8000_0000..0x0000_C000_0000, 1G block, normal memory
+    // boot_pt_l1[2] = A64PTE::new_page(
+    //     PhysAddr::from(0x8000_0000),
+    //     MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
+    //     true,
+    // );
+    // // 0x0000_C000_0000..0x0001_0000_0000, 1G block, DEVICE memory
+    // boot_pt_l1[3] = A64PTE::new_page(
+    //     PhysAddr::from(0xc000_0000),
+    //     MappingFlags::READ | MappingFlags::WRITE | MappingFlags::DEVICE,
+    //     true,
+    // );
+
+    boot_pt_l1[0] = A64PTE::new_table(PhysAddr::from((&mut BOOT_PT_L2).as_ptr() as usize));
+
     boot_pt_l1[1] = A64PTE::new_page(
-        PhysAddr::from(0x4000_0000),
-        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
-        true,
-    );
-    // 0x0000_8000_0000..0x0000_C000_0000, 1G block, normal memory
-    boot_pt_l1[2] = A64PTE::new_page(
-        PhysAddr::from(0x8000_0000),
-        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
-        true,
-    );
-    // 0x0000_C000_0000..0x0001_0000_0000, 1G block, DEVICE memory
-    boot_pt_l1[3] = A64PTE::new_page(
-        PhysAddr::from(0xc000_0000),
+        PhysAddr::from(0x40000000),
         MappingFlags::READ | MappingFlags::WRITE | MappingFlags::DEVICE,
         true,
     );
+
+    for i in 0..503 {
+        BOOT_PT_L2[i] = A64PTE::new_page(
+            PhysAddr::from(i * 0x20_0000),
+            MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
+            true,
+        );
+    }
+    for i in 504..512 {
+        BOOT_PT_L2[i] = A64PTE::new_page(
+            PhysAddr::from(i * 0x20_0000),
+            MappingFlags::READ | MappingFlags::WRITE | MappingFlags::DEVICE,
+            true,
+        );
+    }
 }
