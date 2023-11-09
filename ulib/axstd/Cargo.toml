@@ -17,7 +17,7 @@ repository = "https://github.com/rcore-os/arceos/tree/main/ulib/axstd"
 documentation = "https://rcore-os.github.io/arceos/axstd/index.html"
 
 [features]
-default = []
+default = ["alloc"]
 
 # Multicore
 smp = ["axfeat/smp", "spinlock/smp"]
@@ -74,3 +74,4 @@ arceos_api = { path = "../../api/arceos_api" }
 axio = { path = "../../crates/axio" }
 axerrno = { path = "../../crates/axerrno" }
 spinlock = { path = "../../crates/spinlock" }
+hashbrown = "0.14.2"

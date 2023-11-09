@@ -50,6 +50,9 @@
 #![feature(doc_cfg)]
 #![feature(doc_auto_cfg)]
 #![feature(ip_in_core)]
+#![feature(hashmap_internals)]
+#![feature(hasher_prefixfree_extras)]
+#![feature(const_hash)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -76,3 +79,4 @@ pub mod time;
 pub mod fs;
 #[cfg(feature = "net")]
 pub mod net;
+pub mod hashmap;

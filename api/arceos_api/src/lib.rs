@@ -9,20 +9,20 @@
 #![allow(unused_imports)]
 
 #[cfg(any(
-    feature = "alloc",
-    feature = "fs",
-    feature = "net",
-    feature = "multitask",
-    feature = "dummy-if-not-enabled"
+feature = "alloc",
+feature = "fs",
+feature = "net",
+feature = "multitask",
+feature = "dummy-if-not-enabled"
 ))]
 extern crate alloc;
 extern crate axruntime;
 
+pub use axerrno::{AxError, AxResult};
+
 #[macro_use]
 mod macros;
 mod imp;
-
-pub use axerrno::{AxError, AxResult};
 
 /// Platform-specific constants and parameters.
 pub mod config {
@@ -69,6 +69,7 @@ pub mod mem {
 /// Standard input and output.
 pub mod stdio {
     use core::fmt;
+
     define_api! {
         /// Reads a byte from the console, or returns [`None`] if no input is available.
         pub fn ax_console_read_byte() -> Option<u8>;
@@ -223,8 +224,9 @@ pub mod fs {
 
 /// Networking primitives for TCP/UDP communication.
 pub mod net {
-    use crate::{io::AxPollState, AxResult};
     use core::net::{IpAddr, SocketAddr};
+
+    use crate::{AxResult, io::AxPollState};
 
     define_api_type! {
         @cfg "net";
@@ -336,5 +338,12 @@ pub mod display {
 pub mod io {
     define_api_type! {
         pub type AxPollState;
+    }
+}
+
+/// random
+pub mod random {
+    define_api! {
+        pub fn next() -> u128;
     }
 }
