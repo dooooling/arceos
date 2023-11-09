@@ -190,7 +190,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     }
 
     unsafe { main() };
-
+    loop {}
     #[cfg(feature = "multitask")]
     axtask::exit(0);
     #[cfg(not(feature = "multitask"))]

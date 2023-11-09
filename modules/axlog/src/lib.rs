@@ -49,11 +49,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate log;
+extern crate num_derive;
 
 use core::fmt::{self, Write};
 use core::str::FromStr;
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 
 #[cfg(not(feature = "std"))]
 use crate_interface::call_interface;
@@ -88,7 +91,8 @@ macro_rules! with_color {
 
 #[repr(u8)]
 #[allow(dead_code)]
-enum ColorCode {
+#[derive(FromPrimitive)]
+pub enum ColorCode {
     Black = 30,
     Red = 31,
     Green = 32,
@@ -105,6 +109,14 @@ enum ColorCode {
     BrightMagenta = 95,
     BrightCyan = 96,
     BrightWhite = 97,
+}
+
+impl TryFrom<u8> for ColorCode {
+    type Error = ();
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        FromPrimitive::from_u8(v).ok_or(())
+    }
 }
 
 /// Extern interfaces that must be implemented in other crates.

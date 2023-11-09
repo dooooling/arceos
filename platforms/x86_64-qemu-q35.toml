@@ -18,6 +18,7 @@ kernel-base-vaddr = "0xffff_ff80_0020_0000"
 phys-virt-offset = "0xffff_ff80_0000_0000"
 # MMIO regions with format (`base_paddr`, `size`).
 mmio-regions = [
+    ["0x000b_8000", "0x2000"], # VGA Text Buffer
     ["0xb000_0000", "0x1000_0000"], # PCI config space
     ["0xfe00_0000", "0xc0_0000"],   # PCI devices
     ["0xfec0_0000", "0x1000"],      # IO APIC

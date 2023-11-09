@@ -100,6 +100,6 @@ pub fn getchar() -> Option<u8> {
     COM1.lock().getchar()
 }
 
-pub(super) fn init() {
+pub(super) fn init_early() {
     COM1.lock().init(115200);
 }
