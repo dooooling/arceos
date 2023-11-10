@@ -43,6 +43,9 @@ fn print_prompt() {
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
+    pdev!("pdev!");
+    pdebug!("pdebug!");
+    pinfo!("pinfo!");
     let mut stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
 
