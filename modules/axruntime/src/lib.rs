@@ -22,15 +22,17 @@
 #[macro_use]
 extern crate axlog;
 
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(feature = "smp")]
+pub use self::mp::rust_main_secondary;
+
 #[cfg(all(target_os = "none", not(test)))]
 mod lang_items;
 mod trap;
 
 #[cfg(feature = "smp")]
 mod mp;
-
-#[cfg(feature = "smp")]
-pub use self::mp::rust_main_secondary;
 
 const LOGO: &str = r#"
        d8888                            .d88888b.   .d8888b.
@@ -84,8 +86,6 @@ impl axlog::LogIf for LogIfImpl {
     }
 }
 
-use core::sync::atomic::{AtomicUsize, Ordering};
-
 static INITED_CPUS: AtomicUsize = AtomicUsize::new(0);
 
 fn is_init_ok() -> bool {
@@ -122,7 +122,8 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     );
 
     axlog::init();
-    axlog::set_max_level(option_env!("AX_LOG").unwrap_or("")); // no effect if set `log-level-*` features
+    axlog::set_max_level(option_env!("AX_LOG").unwrap_or(""));
+    // no effect if set `log-level-*` features
     info!("Logging is enabled.");
     info!("Primary CPU {} started, dtb = {:#x}.", cpu_id, dtb);
 
@@ -155,7 +156,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     #[cfg(any(feature = "fs", feature = "net", feature = "display"))]
     {
         #[allow(unused_variables)]
-        let all_devices = axdriver::init_drivers();
+            let all_devices = axdriver::init_drivers();
 
         #[cfg(feature = "fs")]
         axfs::init_filesystems(all_devices.block);
@@ -190,7 +191,11 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     }
 
     unsafe { main() };
-    loop {}
+    loop {
+        if let Some(d) = axhal::keyboard::getchar() {
+            ax_print!("{}", d as char);
+        }
+    }
     #[cfg(feature = "multitask")]
     axtask::exit(0);
     #[cfg(not(feature = "multitask"))]
@@ -202,7 +207,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
 
 #[cfg(feature = "alloc")]
 fn init_allocator() {
-    use axhal::mem::{memory_regions, phys_to_virt, MemRegionFlags};
+    use axhal::mem::{memory_regions, MemRegionFlags, phys_to_virt};
 
     info!("Initialize global memory allocator...");
     info!("  use {} allocator.", axalloc::global_allocator().name());

@@ -28,7 +28,7 @@ pub mod mp {
 
 pub mod mem {
     /// Returns platform-specific memory regions.
-    pub(crate) fn platform_regions() -> impl Iterator<Item = crate::mem::MemRegion> {
+    pub(crate) fn platform_regions() -> impl Iterator<Item=crate::mem::MemRegion> {
         core::iter::empty()
     }
 }
@@ -85,3 +85,10 @@ pub fn platform_init() {}
 /// Initializes the platform devices for secondary CPUs.
 #[cfg(feature = "smp")]
 pub fn platform_init_secondary() {}
+
+pub mod keyboard {
+    pub fn getchar() -> Option<u8> {
+        unimplemented!()
+    }
+}
+

@@ -31,9 +31,14 @@
 #![feature(const_option)]
 #![feature(doc_auto_cfg)]
 #![feature(const_mut_refs)]
+extern crate alloc;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate log;
+
+pub use self::platform::platform_init;
+#[cfg(feature = "smp")]
+pub use self::platform::platform_init_secondary;
 
 mod platform;
 
@@ -75,7 +80,6 @@ pub mod mp {
     pub use super::platform::mp::*;
 }
 
-pub use self::platform::platform_init;
-
-#[cfg(feature = "smp")]
-pub use self::platform::platform_init_secondary;
+pub mod keyboard {
+    pub use super::platform::keyboard::*;
+}
