@@ -1,5 +1,7 @@
-use crate::{AllocError, AllocResult, BaseAllocator, ByteAllocator, PageAllocator};
+use crate::{align_up, AllocError, AllocResult, BaseAllocator, ByteAllocator, PageAllocator};
 use core::alloc::Layout;
+use core::cmp::max;
+use core::mem::size_of;
 use core::ptr::NonNull;
 
 pub struct EarlyAllocator<const PAGE_SIZE: usize> {
@@ -28,8 +30,8 @@ impl<const PAGE_SIZE: usize> EarlyAllocator<PAGE_SIZE> {
 impl<const PAGE_SIZE: usize> BaseAllocator for EarlyAllocator<PAGE_SIZE> {
     fn init(&mut self, start: usize, size: usize) {
         self.start = start;
-        self.end = start + size;
-        self.bytes_index = start;
+        self.end = self.start + size;
+        self.bytes_index = self.start;
         self.page_index = self.end;
         self.size = size;
     }
@@ -41,13 +43,17 @@ impl<const PAGE_SIZE: usize> BaseAllocator for EarlyAllocator<PAGE_SIZE> {
 
 impl<const PAGE_SIZE: usize> ByteAllocator for EarlyAllocator<PAGE_SIZE> {
     fn alloc(&mut self, layout: Layout) -> AllocResult<NonNull<u8>> {
-        let size = layout.size();
-        return if let Some(mem) = NonNull::new(self.bytes_index as *mut u8) {
-            self.bytes_index += size;
-            Ok(mem)
-        } else {
-            Err(AllocError::NoMemory)
-        };
+        let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+        if self.bytes_index + size <= self.page_index {
+            if let Some(mem) = NonNull::new(self.bytes_index as *mut u8) {
+                self.bytes_index += size;
+                return Ok(mem);
+            }
+        }
+        return Err(AllocError::NoMemory);
     }
 
     fn dealloc(&mut self, _pos: NonNull<u8>, _layout: Layout) {}
