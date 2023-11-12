@@ -1,5 +1,5 @@
 use crate::dtb::DtbParseError::InvalidAddr;
-use crate::dtb::GenericNodePrefix::{MEMORY, ROOT, SOC, VIRTIO_MMIO};
+use crate::dtb::GenericNodePrefix::{Memory, Root, Soc, VirtioMmio};
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use core::fmt;
@@ -16,31 +16,31 @@ pub enum DtbParseError {
 }
 
 pub enum GenericNodePrefix {
-    ROOT,
-    MEMORY,
-    SOC,
-    VIRTIO_MMIO,
+    Root,
+    Memory,
+    Soc,
+    VirtioMmio,
 }
 
 impl<'a> Into<&'a str> for GenericNodePrefix {
     fn into(self) -> &'a str {
         match self {
-            ROOT => "/",
-            MEMORY => "memory",
-            SOC => "soc",
-            VIRTIO_MMIO => "virtio_mmio",
+            Root => "/",
+            Memory => "memory",
+            Soc => "soc",
+            VirtioMmio => "virtio_mmio",
         }
     }
 }
 
 pub enum GenericProperty {
-    REG,
+    Reg,
 }
 
 impl<'a> Into<&'a str> for GenericProperty {
     fn into(self) -> &'a str {
         match self {
-            GenericProperty::REG => "reg",
+            GenericProperty::Reg => "reg",
         }
     }
 }
@@ -64,8 +64,8 @@ impl<'a> DtbWrapper<'a> {
     pub fn memory_node(&self) -> (usize, usize) {
         match self
             .dtb
-            .enum_subnodes(ROOT.into())
-            .find(|&node| node.starts_with::<&str>(MEMORY.into()))
+            .enum_subnodes(Root.into())
+            .find(|&node| node.starts_with::<&str>(Memory.into()))
         {
             None => (0, 0),
             Some(name) => self.parse_reg(&name),
@@ -76,22 +76,22 @@ impl<'a> DtbWrapper<'a> {
     pub fn virtio_mmio_node(&self) -> Vec<(usize, usize)> {
         return match self
             .dtb
-            .enum_subnodes(ROOT.into())
-            .find(|&node| node.starts_with::<&str>(SOC.into()))
+            .enum_subnodes(Root.into())
+            .find(|&node| node.starts_with::<&str>(Soc.into()))
         {
             None => Vec::new(),
             Some(node) => self
                 .dtb
                 .enum_subnodes(node)
-                .filter(|&node| node.starts_with::<&str>(VIRTIO_MMIO.into()))
-                .map(|node| self.parse_reg([SOC.into(), node].join("/").as_str()))
+                .filter(|&node| node.starts_with::<&str>(VirtioMmio.into()))
+                .map(|node| self.parse_reg([Soc.into(), node].join("/").as_str()))
                 .collect::<Vec<(usize, usize)>>(),
         };
     }
 
     /// 获取指定节点的 reg 属性值
     fn parse_reg(&self, path: &str) -> (usize, usize) {
-        match self.dtb.get_property(path, GenericProperty::REG.into()) {
+        match self.dtb.get_property(path, GenericProperty::Reg.into()) {
             None => (0, 0),
             Some(reg) => (bebytes2usize(&reg[..8]), bebytes2usize(&reg[8..])),
         }
