@@ -60,6 +60,9 @@ log-level-info = ["axlog/log-level-info"]
 log-level-debug = ["axlog/log-level-debug"]
 log-level-trace = ["axlog/log-level-trace"]
 
+
+dtb = ["axruntime/axdtb"]
+
 [dependencies]
 axruntime = { path = "../../modules/axruntime" }
 axhal = { path = "../../modules/axhal" }

@@ -68,6 +68,8 @@ log-level-info = ["axfeat/log-level-info"]
 log-level-debug = ["axfeat/log-level-debug"]
 log-level-trace = ["axfeat/log-level-trace"]
 
+dtb = ["axfeat/dtb"]
+
 [dependencies]
 axfeat = { path = "../../api/axfeat" }
 arceos_api = { path = "../../api/arceos_api" }
