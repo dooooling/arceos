@@ -27,8 +27,11 @@ mod slab;
 #[cfg(feature = "slab")]
 pub use slab::SlabByteAllocator;
 
+mod early;
+pub use early::EarlyAllocator;
 #[cfg(feature = "tlsf")]
 mod tlsf;
+
 #[cfg(feature = "tlsf")]
 pub use tlsf::TlsfByteAllocator;
 
