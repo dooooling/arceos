@@ -4,22 +4,46 @@
 #[cfg(feature = "axstd")]
 use axstd::println;
 
+use crate::config::{BLOCK_COUNT_WIDTH, BLOCK_SIZE, MARGIN_SIZE_WIDTH};
+
+mod config;
+
 const PLASH_START: usize = 0x22000000;
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
     let apps_start = PLASH_START as *const u8;
-    let apps_size = 32; // Dangerous!!! We need to get accurate size of apps.
-
     println!("Load payload ...");
-
-    let code = unsafe { core::slice::from_raw_parts(apps_start, apps_size) };
-    println!("content: {:#x}", bytes_to_usize(&code[..8]));
+    let app = App::parse_app(apps_start);
+    println!("content: {:?}", app.code);
 
     println!("Load payload ok!");
 }
 
-#[inline]
-fn bytes_to_usize(bytes: &[u8]) -> usize {
-    usize::from_be_bytes(bytes.try_into().unwrap())
+
+struct App<'a> {
+    size: u32,
+    code: &'a [u8],
 }
+
+impl App<'_> {
+    /// 解析app
+    fn parse_app(apps_start: *const u8) -> Self {
+        let block_count = unsafe { core::slice::from_raw_parts(apps_start, BLOCK_COUNT_WIDTH as usize) };
+        let block_count = u32::from_le_bytes(block_count.try_into().unwrap());
+
+        let margin = unsafe {
+            core::slice::from_raw_parts(apps_start.offset(BLOCK_COUNT_WIDTH as isize),
+                                        MARGIN_SIZE_WIDTH as usize)
+        };
+        let margin = u32::from_le_bytes(margin.try_into().unwrap());
+
+        let size = block_count * BLOCK_SIZE + margin;
+        let code = unsafe { core::slice::from_raw_parts(apps_start.offset((BLOCK_COUNT_WIDTH + MARGIN_SIZE_WIDTH) as isize), size as usize) };
+        Self {
+            size,
+            code,
+        }
+    }
+}
+
