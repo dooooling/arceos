@@ -25,12 +25,16 @@ mod config;
 ///
 ///
 fn main() {
+    println!("cargo:rerun-if-changed={}/*{}",APP_DIR,APP_SUFFIX);
+
     let apps_bin = std::fs::File::create(BIN_TEMP).unwrap();
     let mut apps_wbuf = BufWriter::new(apps_bin);
 
-    let apps = find_apps();
-
+    let mut apps = find_apps();
     assert!(apps.len() <= u8::MAX as usize);
+
+    apps.sort_by(|e1,e2|e1.file_name().cmp(&e2.file_name()));
+
     // 写入app数量
     apps_wbuf
         .write((apps.len() as u8).to_le_bytes().as_ref())
