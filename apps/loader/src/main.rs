@@ -25,8 +25,6 @@ fn main() {
     println!("Load payload ...");
     let apps = App::parse_apps(load_start);
     println!("Load payload ok!");
-    // let load_code = unsafe { core::slice::from_raw_parts(load_start, load_size) };
-    // println!("load code {:?}; address [{:?}]", load_code, load_code.as_ptr());
 
     // app running aspace
     // SBI(0x80000000) -> App <- Kernel(0x80200000)
@@ -36,20 +34,32 @@ fn main() {
         let run_code = unsafe {
             core::slice::from_raw_parts_mut(RUN_START as *mut u8, app.size)
         };
-        // run_code.fill(0);
         run_code.copy_from_slice(app.code);
         println!("run code {:?}; address [{:?}]", run_code, run_code.as_ptr());
-        println!("Execute app ...");
-
-        // execute app
-        unsafe {
-            core::arch::asm!("
-                li      t2, {run_start}
-                jalr    t2",
-            run_start = const RUN_START,
-            )
-        }
     }
+
+    register_abi(SYS_HELLO, abi_hello as usize);
+    register_abi(SYS_PUTCHAR, abi_putchar as usize);
+    register_abi(SYS_EXIT, abi_exit as usize);
+    println!("Execute app ...");
+
+    // execute app
+    unsafe { core::arch::asm!("
+        li      t0, {abi_num}
+        slli    t0, t0, 3
+        la      t1, {abi_table}
+        add     t1, t1, t0
+        ld      t1, (t1)
+        jalr    t1
+        li      t2, {run_start}
+        jalr    t2
+        j       .",
+    run_start = const RUN_START,
+    abi_table = sym ABI_TABLE,
+    //abi_num = const SYS_HELLO,
+    abi_num = const SYS_EXIT,
+    in("a0") 0,
+    )}
 }
 
 
@@ -91,4 +101,28 @@ impl App<'_> {
         apps
     }
 }
+
+const SYS_HELLO: usize = 1;
+const SYS_PUTCHAR: usize = 2;
+const SYS_EXIT: usize = 3;
+
+static mut ABI_TABLE: [usize; 16] = [0; 16];
+
+fn register_abi(num: usize, handle: usize) {
+    unsafe { ABI_TABLE[num] = handle; }
+}
+
+fn abi_hello() {
+    println!("[ABI:Hello] Hello, Apps!");
+}
+
+fn abi_putchar(c: char) {
+    println!("[ABI:Print] {c}");
+}
+fn abi_exit(code: i32) {
+    println!("[ABI:Exit] exit code {code}");
+    axstd::process::exit(code)
+}
+
+
 
