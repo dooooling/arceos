@@ -26,6 +26,14 @@ macro_rules! register_display_driver {
     };
 }
 
+macro_rules! register_xhci_driver {
+    ($driver_type:ty, $device_type:ty) => {
+        /// The unified type of the xhci devices.
+        #[cfg(not(feature = "dyn"))]
+        pub type AxXhciDevice = $device_type;
+    };
+}
+
 macro_rules! for_each_drivers {
     (type $drv_type:ident, $code:block) => {{
         #[allow(unused_imports)]
@@ -62,6 +70,11 @@ macro_rules! for_each_drivers {
         #[cfg(net_dev = "ixgbe")]
         {
             type $drv_type = crate::drivers::IxgbeDriver;
+            $code
+        }
+        #[cfg(xhci_dev = "xhci")]
+        {
+            type $drv_type = crate::drivers::XhciDriver;
             $code
         }
     }};

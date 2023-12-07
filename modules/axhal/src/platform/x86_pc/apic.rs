@@ -34,6 +34,7 @@ pub fn set_enable(vector: usize, enabled: bool) {
     // should not affect LAPIC interrupts
     if vector < APIC_TIMER_VECTOR as _ {
         unsafe {
+            let vector = vector - 0x20;
             if enabled {
                 IO_APIC.lock().enable_irq(vector as u8);
             } else {
@@ -114,7 +115,11 @@ pub(super) fn init_primary() {
     }
 
     info!("Initialize IO APIC...");
-    let io_apic = unsafe { IoApic::new(phys_to_virt(IO_APIC_BASE).as_usize() as u64) };
+    let mut io_apic = unsafe { IoApic::new(phys_to_virt(IO_APIC_BASE).as_usize() as u64) };
+    unsafe {
+        // init ioapic
+        io_apic.init(0x20);
+    }
     IO_APIC.init_by(SpinNoIrq::new(io_apic));
 }
 

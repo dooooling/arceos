@@ -2,6 +2,7 @@
 
 use crate::prelude::*;
 use alloc::{boxed::Box, vec, vec::Vec};
+use driver_xhci::XhciDriverOps;
 
 /// The unified type of the NIC devices.
 #[cfg(feature = "net")]
@@ -12,6 +13,9 @@ pub type AxBlockDevice = Box<dyn BlockDriverOps>;
 /// The unified type of the graphics display devices.
 #[cfg(feature = "display")]
 pub type AxDisplayDevice = Box<dyn DisplayDriverOps>;
+
+#[cfg(feature = "xhci")]
+pub type AxXhciDevice = Box<dyn XhciDriverOps>;
 
 impl super::AxDeviceEnum {
     /// Constructs a network device.
@@ -30,6 +34,12 @@ impl super::AxDeviceEnum {
     #[cfg(feature = "display")]
     pub fn from_display(dev: impl DisplayDriverOps + 'static) -> Self {
         Self::Display(Box::new(dev))
+    }
+
+    /// Constructs a display device.
+    #[cfg(feature = "xhci")]
+    pub fn from_xhci(dev: impl XhciDriverOps + 'static) -> Self {
+        Self::Xhci(Box::new(dev))
     }
 }
 

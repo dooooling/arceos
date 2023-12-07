@@ -57,12 +57,25 @@
 #![no_std]
 #![feature(doc_auto_cfg)]
 #![feature(associated_type_defaults)]
-
-#[macro_use]
-extern crate log;
+#![feature(const_option)]
+#![feature(const_nonnull_new)]
 
 #[cfg(feature = "dyn")]
 extern crate alloc;
+#[macro_use]
+extern crate log;
+
+#[allow(unused_imports)]
+use self::prelude::*;
+pub use self::structs::{AxDeviceContainer, AxDeviceEnum};
+#[cfg(feature = "block")]
+pub use self::structs::AxBlockDevice;
+#[cfg(feature = "display")]
+pub use self::structs::AxDisplayDevice;
+#[cfg(feature = "net")]
+pub use self::structs::AxNetDevice;
+#[cfg(feature = "xhci")]
+pub use self::structs::AxXhciDevice;
 
 #[macro_use]
 mod macros;
@@ -79,17 +92,7 @@ mod virtio;
 mod ixgbe;
 
 pub mod prelude;
-
-#[allow(unused_imports)]
-use self::prelude::*;
-pub use self::structs::{AxDeviceContainer, AxDeviceEnum};
-
-#[cfg(feature = "block")]
-pub use self::structs::AxBlockDevice;
-#[cfg(feature = "display")]
-pub use self::structs::AxDisplayDevice;
-#[cfg(feature = "net")]
-pub use self::structs::AxNetDevice;
+mod usb;
 
 /// A structure that contains all device drivers, organized by their category.
 #[derive(Default)]
@@ -103,6 +106,8 @@ pub struct AllDevices {
     /// All graphics device drivers.
     #[cfg(feature = "display")]
     pub display: AxDeviceContainer<AxDisplayDevice>,
+    #[cfg(feature = "xhci")]
+    pub xhci: AxDeviceContainer<AxXhciDevice>,
 }
 
 impl AllDevices {
@@ -143,6 +148,8 @@ impl AllDevices {
             AxDeviceEnum::Block(dev) => self.block.push(dev),
             #[cfg(feature = "display")]
             AxDeviceEnum::Display(dev) => self.display.push(dev),
+            #[cfg(feature = "xhci")]
+            AxDeviceEnum::Xhci(dev) => self.xhci.push(dev),
         }
     }
 }
@@ -180,5 +187,13 @@ pub fn init_drivers() -> AllDevices {
         }
     }
 
+    #[cfg(feature = "xhci")]
+    {
+        debug!("number of xhci devices: {}", all_devs.xhci.len());
+        for (i, dev) in all_devs.xhci.iter().enumerate() {
+            assert_eq!(dev.device_type(), DeviceType::Xhci);
+            debug!("  xhci device {}: {:?}", i, dev.device_name());
+        }
+    }
     all_devs
 }

@@ -2,14 +2,15 @@
 
 #![allow(unused_imports)]
 
-use crate::AxDeviceEnum;
 use driver_common::DeviceType;
-
-#[cfg(feature = "virtio")]
-use crate::virtio::{self, VirtIoDevMeta};
-
 #[cfg(feature = "bus-pci")]
 use driver_pci::{DeviceFunction, DeviceFunctionInfo, PciRoot};
+use driver_virtio::pci;
+use driver_xhci::XhciController;
+
+use crate::AxDeviceEnum;
+#[cfg(feature = "virtio")]
+use crate::virtio::{self, VirtIoDevMeta};
 
 pub use super::dummy::*;
 
@@ -43,6 +44,12 @@ register_net_driver!(
 register_block_driver!(
     <virtio::VirtIoBlk as VirtIoDevMeta>::Driver,
     <virtio::VirtIoBlk as VirtIoDevMeta>::Device
+);
+
+#[cfg(display_dev = "virtio-gpu")]
+register_display_driver!(
+    <virtio::VirtIoGpu as VirtIoDevMeta>::Driver,
+    <virtio::VirtIoGpu as VirtIoDevMeta>::Device
 );
 
 #[cfg(display_dev = "virtio-gpu")]
@@ -124,6 +131,39 @@ cfg_if::cfg_if! {
                         }
                     }
                     None
+            }
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(xhci_dev = "xhci")]{
+        use axhal::mem::phys_to_virt;
+        pub struct XhciDriver;
+        register_xhci_driver!(XhciDriver, driver_xhci::XhciController);
+        impl DriverProbe for XhciDriver {
+            fn probe_pci(
+                root: &mut PciRoot,
+                bdf: DeviceFunction,
+                dev_info: &DeviceFunctionInfo,
+            ) -> Option<AxDeviceEnum> {
+                return match ( dev_info.class,dev_info.subclass,dev_info.prog_if){
+                    (0xC, 0x3, 0x30)=>{
+                        let bar_info = root.bar_info(bdf, 0).unwrap();
+                        let caps = root.capabilities(bdf);
+
+                        if let driver_pci::BarInfo::Memory{address,size, address_type,..} = bar_info{
+                            info!("found a USB compatible device entry. (xHCI)");
+                            info!("bus = {}, device = {}, function = {} io base: {:#X}, type : {:?}", bdf.bus,bdf.device,bdf.function,address,address_type);
+                            Some(AxDeviceEnum::Xhci(XhciController::init( phys_to_virt((address as usize).into()).into())))
+                        }else{
+                            None
+                        }
+                    },
+                    _=>{
+                         None
+                    },
+                }
             }
         }
     }

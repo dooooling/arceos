@@ -27,6 +27,8 @@ pub enum DeviceType {
     Net,
     /// Graphic display device (e.g., GPU)
     Display,
+    /// xhci device
+    Xhci,
 }
 
 /// The error type for device operation failures.
