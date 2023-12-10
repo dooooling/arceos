@@ -67,7 +67,6 @@ extern crate log;
 
 #[allow(unused_imports)]
 use self::prelude::*;
-pub use self::structs::{AxDeviceContainer, AxDeviceEnum};
 #[cfg(feature = "block")]
 pub use self::structs::AxBlockDevice;
 #[cfg(feature = "display")]
@@ -76,6 +75,7 @@ pub use self::structs::AxDisplayDevice;
 pub use self::structs::AxNetDevice;
 #[cfg(feature = "xhci")]
 pub use self::structs::AxXhciDevice;
+pub use self::structs::{AxDeviceContainer, AxDeviceEnum};
 
 #[macro_use]
 mod macros;
@@ -93,6 +93,8 @@ mod ixgbe;
 
 pub mod prelude;
 mod usb;
+
+extern crate driver_xhci;
 
 /// A structure that contains all device drivers, organized by their category.
 #[derive(Default)]

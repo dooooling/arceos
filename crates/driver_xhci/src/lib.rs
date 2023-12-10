@@ -1,15 +1,16 @@
 #![no_std]
 
 extern crate alloc;
+mod context;
+mod registers;
+mod ring;
 
+use core::alloc::GlobalAlloc;
 use tock_registers::interfaces::Readable;
 
 use driver_common::{BaseDriverOps, DeviceType};
 
 use crate::registers::Registers;
-
-mod registers;
-
 
 pub struct XhciController {
     base_addr: usize,

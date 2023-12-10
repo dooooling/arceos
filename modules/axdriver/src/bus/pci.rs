@@ -3,7 +3,7 @@ use driver_pci::{
     BarInfo, Cam, Command, DeviceFunction, HeaderType, MemoryBarType, PciRangeAllocator, PciRoot,
 };
 
-use crate::{AllDevices, prelude::*};
+use crate::{prelude::*, AllDevices};
 
 const PCI_BAR_NUM: u8 = 6;
 
@@ -101,9 +101,9 @@ impl AllDevices {
                 }
                 match config_pci_device(&mut root, bdf, &mut allocator) {
                     Ok(_) => {
-                        if crate::usb::hcd::parse_hci(&bdf,&dev_info) {
-                            continue;
-                        }
+                        // if crate::usb::hcd::parse_hci(&bdf,&dev_info) {
+                        //     continue;
+                        // }
                         for_each_drivers!(type Driver, {
                             if let Some(dev) = Driver::probe_pci(&mut root, bdf, &dev_info) {
                                 info!(

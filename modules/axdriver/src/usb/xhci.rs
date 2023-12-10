@@ -1,16 +1,16 @@
 extern crate alloc;
 
-use alloc::{vec, vec::Vec};
 use alloc::string::String;
+use alloc::{vec, vec::Vec};
 use core::alloc::Layout;
 use core::fmt::{Debug, Display, Formatter};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::time::Duration;
 
-use tock_registers::{register_bitfields, register_structs};
 use tock_registers::interfaces::{Readable, Writeable};
 use tock_registers::registers::{ReadOnly, ReadWrite};
+use tock_registers::{register_bitfields, register_structs};
 
 use axalloc::global_allocator;
 
@@ -57,11 +57,21 @@ impl XHCIRegister {
                         .read(CAPLVERSION::caplength) as isize,
                 ),
             )
-                .unwrap()
-                .cast()
+            .unwrap()
+            .cast()
         };
-        error!("cap len : {}", unsafe{capability.as_ref().capl_version.read(CAPLVERSION::caplength)});
-        error!("hci version : {}", unsafe{capability.as_ref().capl_version.read(CAPLVERSION::hciversion)});
+        error!("cap len : {}", unsafe {
+            capability
+                .as_ref()
+                .capl_version
+                .read(CAPLVERSION::caplength)
+        });
+        error!("hci version : {}", unsafe {
+            capability
+                .as_ref()
+                .capl_version
+                .read(CAPLVERSION::hciversion)
+        });
         let mut xecps = vec![];
         unsafe {
             let mut xecp_offset = capability.as_ref().hccparams1.read(HCCPARAMS1::XECP);
@@ -79,9 +89,7 @@ impl XHCIRegister {
                 xecp_offset += next_offset;
             }
         }
-        let max_ports = unsafe {
-            capability.as_ref().hcsparams1.read(HCSPARAMS1::MaxPorts)
-        };
+        let max_ports = unsafe { capability.as_ref().hcsparams1.read(HCSPARAMS1::MaxPorts) };
         Self {
             base,
             capability,
@@ -103,7 +111,6 @@ impl XHCIRegister {
 
     /// 初始化 xHCI 控制器
     pub fn init(&self, gsi: u32) {
-
         // 控制器复位
         self.xhci_rest();
 
@@ -118,7 +125,9 @@ impl XHCIRegister {
         let page_size = (op.PAGESIZE.get() & 0xFFFF) << 12;
         let max_slots = cap.hcsparams1.read(HCSPARAMS1::MaxSlots);
         info!("xHCI page size : {:#X}", page_size);
-        let addr = unsafe { global_allocator().alloc(Layout::from_size_align_unchecked(2048, 64)) }.unwrap().as_ptr();
+        let addr = unsafe { global_allocator().alloc(Layout::from_size_align_unchecked(2048, 64)) }
+            .unwrap()
+            .as_ptr();
         for i in 0..2048 {
             unsafe { addr.offset(i).write(0) }
         }
@@ -129,12 +138,29 @@ impl XHCIRegister {
         info!("max scratch buffs : {:#X}", max_scratch_buffs);
 
         if max_scratch_buffs > 0 {
-            let scratch_buff_array_start = unsafe { global_allocator().alloc(Layout::from_size_align_unchecked((max_scratch_buffs * 8) as usize, 64)) }.unwrap().as_ptr();
-            let scratch_buff_start = unsafe { global_allocator().alloc(Layout::from_size_align_unchecked((max_scratch_buffs * page_size) as usize, page_size as usize)) }.unwrap().as_ptr();
+            let scratch_buff_array_start = unsafe {
+                global_allocator().alloc(Layout::from_size_align_unchecked(
+                    (max_scratch_buffs * 8) as usize,
+                    64,
+                ))
+            }
+            .unwrap()
+            .as_ptr();
+            let scratch_buff_start = unsafe {
+                global_allocator().alloc(Layout::from_size_align_unchecked(
+                    (max_scratch_buffs * page_size) as usize,
+                    page_size as usize,
+                ))
+            }
+            .unwrap()
+            .as_ptr();
             unsafe {
                 addr.cast::<u64>().write(scratch_buff_array_start as u64);
                 for i in 0..max_scratch_buffs {
-                    scratch_buff_array_start.cast::<u64>().offset(i as isize).write((scratch_buff_start as usize + (i * page_size) as usize) as u64);
+                    scratch_buff_array_start
+                        .cast::<u64>()
+                        .offset(i as isize)
+                        .write((scratch_buff_start as usize + (i * page_size) as usize) as u64);
                 }
             }
         }
@@ -160,20 +186,27 @@ impl XHCIRegister {
         // rutime register
         let rtsoff = cap.rtsoff.read(RTSOFF::OFFSET);
         unsafe {
-            let ir_set = self.base.as_ptr().offset((rtsoff + 0x20) as isize).cast::<InterrupterRegisterSet>();
+            let ir_set = self
+                .base
+                .as_ptr()
+                .offset((rtsoff + 0x20) as isize)
+                .cast::<InterrupterRegisterSet>();
             (*ir_set).IMAN.write(IMAN::IE::SET);
             (*ir_set).IMAN.write(IMAN::IP::SET);
             (*ir_set).IMOD.write(IMOD::IMODC::CLEAR);
             (*ir_set).IMOD.write(IMOD::IMODI::CLEAR);
             (*ir_set).ERSTSZ.set(1);
-            (*ir_set).ERSTBA.write(ERSTBA::BASE_ADDR.val(cur_event_ring_addr as u64));
-            (*ir_set).ERDP.write(ERDP::POINTER.val(event_ring_addr as u64));
+            (*ir_set)
+                .ERSTBA
+                .write(ERSTBA::BASE_ADDR.val(cur_event_ring_addr as u64));
+            (*ir_set)
+                .ERDP
+                .write(ERDP::POINTER.val(event_ring_addr as u64));
         }
         op.USBSTS.set((1 << 10) | (1 << 4) | (1 << 3) | (1 << 2));
         axhal::irq::register_handler((gsi + 0x20) as usize, test_handler);
         op.USBCMD.set((1 << 3) | (1 << 2) | (1 << 0));
         axhal::time::busy_wait(Duration::from_millis(100));
-
 
         // loop through the ports, starting with the USB3 ports
         // for (i = 0; i < ndp; i++) {
@@ -186,14 +219,19 @@ impl XHCIRegister {
         //         xhci_get_descriptor(i);
         //     }
         // }
-        ports.iter_mut().filter(|p| (p.flags & PROTO_USB3) == PROTO_USB3 && (p.flags & PROTO_ACTIVE) == PROTO_ACTIVE).for_each(|p| {
-            if self.xhci_reset_port(p) {
-                error!(" rest port success!");
-                self.xhci_get_descriptor(p);
-            } else {
-                error!(" rest port error!");
-            }
-        });
+        ports
+            .iter_mut()
+            .filter(|p| {
+                (p.flags & PROTO_USB3) == PROTO_USB3 && (p.flags & PROTO_ACTIVE) == PROTO_ACTIVE
+            })
+            .for_each(|p| {
+                if self.xhci_reset_port(p) {
+                    error!(" rest port success!");
+                    self.xhci_get_descriptor(p);
+                } else {
+                    error!(" rest port error!");
+                }
+            });
         for i in 0..ports.len() {}
     }
     fn xhci_rest(&self) {
@@ -243,23 +281,28 @@ impl XHCIRegister {
     }
 
     fn pair_ports(&self) -> Vec<Port> {
-        let mut ports: Vec<Port> = (0..self.max_ports).map(|_| { Port::default() }).collect();
-        let usb_xecps: Vec<&XecpUSBProtocol> = self.xecps.iter().filter_map(|xecp| {
-            unsafe {
+        let mut ports: Vec<Port> = (0..self.max_ports).map(|_| Port::default()).collect();
+        let usb_xecps: Vec<&XecpUSBProtocol> = self
+            .xecps
+            .iter()
+            .filter_map(|xecp| unsafe {
                 if xecp.as_ref().DW0.read(XEPCNORMAL::ID) == 2 {
                     Some(xecp.cast::<XecpUSBProtocol>().as_ref())
                 } else {
                     None
                 }
-            }
-        }).collect();
+            })
+            .collect();
         let mut ports_usb2 = 0;
         let mut ports_usb3 = 0;
         for x in usb_xecps {
             let offset = x.DW2.read(USBPRTL_DW2::COMP_OFFSET) - 1;
             let count = x.DW2.read(USBPRTL_DW2::COMP_COUNT);
             let define = x.DW2.read(USBPRTL_DW2::PROT_DEF);
-            info!("usb protocol offset : {} , count : {} , define : {}",offset, count, define);
+            info!(
+                "usb protocol offset : {} , count : {} , define : {}",
+                offset, count, define
+            );
 
             //usb 2
             if x.DW0.read(USBPRTL_DW0::MAJOR) == 2 {
@@ -294,7 +337,8 @@ impl XHCIRegister {
         }
         for i in 0..ports.len() {
             for j in 0..ports.len() {
-                if ports[i].offset == ports[j].offset && (ports[i].flags & 1 != ports[j].flags & 1) {
+                if ports[i].offset == ports[j].offset && (ports[i].flags & 1 != ports[j].flags & 1)
+                {
                     ports[i].other_port_num = j as u8;
                     ports[i].flags |= PROTO_HAS_PAIR;
                     ports[j].other_port_num = i as u8;
@@ -304,7 +348,9 @@ impl XHCIRegister {
         }
 
         for port in ports.iter_mut() {
-            if port.flags & 1 == 1 || (port.flags & 1 == 0 && port.flags & PROTO_HAS_PAIR == PROTO_HAS_PAIR) {
+            if port.flags & 1 == 1
+                || (port.flags & 1 == 0 && port.flags & PROTO_HAS_PAIR == PROTO_HAS_PAIR)
+            {
                 port.flags |= PROTO_ACTIVE;
             }
         }
@@ -315,7 +361,14 @@ impl XHCIRegister {
         let mut ret = false;
 
         // power the port?
-        let port_set = unsafe { self.operational.cast::<u8>().as_ptr().offset(0x400).cast::<PortRegisterSet>().offset(port.offset as isize) };
+        let port_set = unsafe {
+            self.operational
+                .cast::<u8>()
+                .as_ptr()
+                .offset(0x400)
+                .cast::<PortRegisterSet>()
+                .offset(port.offset as isize)
+        };
         info!("port address {:#X}", port_set as usize);
         let portsc = unsafe { &(*port_set).PORTSC };
         if portsc.get() & (1 << 9) == 0 {
@@ -364,11 +417,17 @@ impl XHCIRegister {
     }
 
     fn xhci_get_descriptor(&self, port: &mut Port) {
-        let port_set = unsafe { self.operational.cast::<u8>().as_ptr().offset(0x400).cast::<PortRegisterSet>().offset(port.offset as isize) };
+        let port_set = unsafe {
+            self.operational
+                .cast::<u8>()
+                .as_ptr()
+                .offset(0x400)
+                .cast::<PortRegisterSet>()
+                .offset(port.offset as isize)
+        };
         info!("port address {:#X}", port_set as usize);
         let portsc = unsafe { &(*port_set).PORTSC };
         let speed = (portsc.get() & (0xF << 10)) >> 10;
-
 
         // send the command and wait for it to return
         // let trb = Trb::(5).unwrap();
@@ -394,8 +453,16 @@ const TRB_LINK_CMND: u32 = ((6 & 0x3F) << 10 | 0 << 5 | 0 << 4 | 0 << 1 | 1 << 0
 
 fn create_ring(trbs: usize) -> *mut u8 {
     unsafe {
-        let addr = global_allocator().alloc(Layout::from_size_align_unchecked((trbs * size_of::<Trb>()), 64)).unwrap().as_ptr();
-        let link_trb = addr.offset(((trbs - 1) * size_of::<Trb>()) as isize).cast::<Trb>();
+        let addr = global_allocator()
+            .alloc(Layout::from_size_align_unchecked(
+                (trbs * size_of::<Trb>()),
+                64,
+            ))
+            .unwrap()
+            .as_ptr();
+        let link_trb = addr
+            .offset(((trbs - 1) * size_of::<Trb>()) as isize)
+            .cast::<Trb>();
         (*link_trb).param.set(addr as u64);
         (*link_trb).status.set((0 << 22) | 0);
         (*link_trb).command.set(TRB_LINK_CMND);
@@ -405,8 +472,17 @@ fn create_ring(trbs: usize) -> *mut u8 {
 
 fn create_event_ring(trbs: usize) -> (*mut u8, *mut u8) {
     unsafe {
-        let tab_addr = global_allocator().alloc(Layout::from_size_align_unchecked(64, 64)).unwrap().as_ptr();
-        let addr = global_allocator().alloc(Layout::from_size_align_unchecked((trbs * size_of::<Trb>()), 64)).unwrap().as_ptr();
+        let tab_addr = global_allocator()
+            .alloc(Layout::from_size_align_unchecked(64, 64))
+            .unwrap()
+            .as_ptr();
+        let addr = global_allocator()
+            .alloc(Layout::from_size_align_unchecked(
+                (trbs * size_of::<Trb>()),
+                64,
+            ))
+            .unwrap()
+            .as_ptr();
         tab_addr.cast::<u64>().write(addr as u64);
         tab_addr.cast::<u32>().offset(2).write(trbs as u32);
         tab_addr.cast::<u32>().offset(3).write(0);
