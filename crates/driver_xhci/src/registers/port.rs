@@ -1,8 +1,8 @@
 use core::ptr::NonNull;
 
-use tock_registers::{register_bitfields, register_structs};
 use tock_registers::interfaces::{Readable, Writeable};
 use tock_registers::registers::ReadWrite;
+use tock_registers::{register_bitfields, register_structs};
 
 use crate::registers::port;
 
@@ -22,9 +22,9 @@ impl Port {
     }
     pub fn reset(&self) {
         self.portsc.write(PORTSC::PR.val(1));
-        self.portsc.write(PORTSC::PED.val(1));
+        // self.portsc.write(PORTSC::PED.val(1));
         self.portsc.write(PORTSC::WCE.val(1));
-        while self.portsc.read(PORTSC::PR) == 1 {}
+        while self.portsc.read(PORTSC::PR) != 0 {}
     }
 }
 
@@ -68,7 +68,9 @@ impl Iterator for PortSet {
     type Item = NonNull<Port>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.max_ports {
-            let addr = unsafe { (self.operational_addr as *mut u8).offset(0x400 + (0x10 * self.index) as isize) };
+            let addr = unsafe {
+                (self.operational_addr as *mut u8).offset(0x400 + (0x10 * self.index) as isize)
+            };
             self.index += 1;
             return Some(NonNull::new(addr).unwrap().cast());
         }

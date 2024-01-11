@@ -2,25 +2,25 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 
-use log::debug;
+use log::{debug, error};
 use tock_registers::interfaces::{Readable, Writeable};
 
 use crate::device::context::DeviceContext;
 use crate::registers::capability::{
     Capability, CAPABILITY_DW1, HCCPARAMS1, HCSPARAMS1, HCSPARAMS2, RTSOFF,
 };
-use crate::registers::operational::{CONFIG, CRCR, Operational, USBCMD, USBSTS};
-use crate::registers::runtime::{IMAN, IMOD, Runtime};
+use crate::registers::operational::{Operational, CONFIG, CRCR, USBCMD, USBSTS};
 use crate::registers::runtime::ERDP::ERDP;
 use crate::registers::runtime::ERSTBA::ERSTBA;
 use crate::registers::runtime::ERSTSZ::ERSTSZ;
+use crate::registers::runtime::{Runtime, IMAN, IMOD};
 use crate::ring::{CommandRing, EventRingSegmentTableEntry};
 
 pub mod capability;
 pub mod doorbell;
 pub mod operational;
-pub mod runtime;
 pub mod port;
+pub mod runtime;
 
 pub struct Registers {
     capability: Arc<NonNull<Capability>>,
@@ -69,7 +69,9 @@ impl Registers {
     }
 
     pub fn set_max_slot_enable(&self, max_slot: u32) {
-        self.operational().config.write(CONFIG::MAXSLOTEN.val(max_slot));
+        self.operational()
+            .config
+            .write(CONFIG::MAXSLOTEN.val(max_slot));
     }
 
     pub fn set_command_ring(&self, ring: &CommandRing) {
@@ -77,27 +79,45 @@ impl Registers {
         operational.crcr.write(CRCR::RCS.val(ring.cycle_bit as u64));
         operational.crcr.write(CRCR::CS.val(0));
         operational.crcr.write(CRCR::CA.val(0));
-        operational.crcr.write(CRCR::CRP.val(ring.buf.as_slice().as_ptr() as u64));
+        operational
+            .crcr
+            .write(CRCR::CRP.val((ring.buf.as_slice().as_ptr() as u64) >> 6));
     }
 
     pub fn set_device_context_base_address_array(&self, dcbaa: &Vec<DeviceContext>) {
-        self.operational().dcbaap.set(dcbaa.as_slice().as_ptr() as u64);
+        self.operational()
+            .dcbaap
+            .set(dcbaa.as_slice().as_ptr() as u64);
     }
     // pub fn set_device_context_base_address_array(&self, erst: &Vec<EventRingSegmentTableEntry>) {
     //     self.operational.dcbaap.set(dcbaap);
     // }
 
     pub fn set_primary_interrupter(&self, ers_table: &Vec<EventRingSegmentTableEntry>) {
+        let erdp = ers_table[0].data[0] >> 4;
+        error!("erste :\n{:#X}", erdp);
         let runtime = self.runtime();
-        let primary_interrupter = &runtime.ints[0];
-        primary_interrupter.erstsz.write(ERSTSZ.val(ers_table.len() as u32));
-        primary_interrupter.erdp.write(ERDP.val(ers_table[0].data[0]));
-        primary_interrupter.erstba.write(ERSTBA.val(ers_table.as_slice().as_ptr() as u64));
 
+        let primary_interrupter = &runtime.ints[0];
+        primary_interrupter
+            .erstsz
+            .write(ERSTSZ.val(ers_table.len() as u32));
+        primary_interrupter
+            .erdp
+            .write(ERDP.val(ers_table[0].data[0] >> 4));
+        primary_interrupter
+            .erstba
+            .write(ERSTBA.val(ers_table.as_slice().as_ptr() as u64));
 
         primary_interrupter.imod.write(IMOD::IMODI.val(4000));
-        primary_interrupter.iman.write(IMAN::IE::SET);
         primary_interrupter.iman.write(IMAN::IP::SET);
+        primary_interrupter.iman.write(IMAN::IE::SET);
+    }
+
+    pub fn get_erdp(&self) -> u64 {
+        let runtime = self.runtime();
+        let primary_interrupter = &runtime.ints[0];
+        primary_interrupter.erdp.read(ERDP)
     }
 
     pub fn set_erdp(&self, erdp: u64) {
@@ -106,10 +126,11 @@ impl Registers {
         primary_interrupter.erdp.write(ERDP.val(erdp));
     }
 
-
     pub fn reset(&self) {
         let operational = self.operational();
-        operational.usbcmd.write(USBCMD::RS::CLEAR);
+        operational.usbcmd.write(USBCMD::INTE::CLEAR);
+        operational.usbcmd.write(USBCMD::HSEE::CLEAR);
+        operational.usbcmd.write(USBCMD::EWE::CLEAR);
         while operational.usbsts.read(USBSTS::HCH) == 0 {}
         debug!("xhci controller stopped!");
 
@@ -122,7 +143,7 @@ impl Registers {
         let operational = self.operational();
         operational.usbcmd.write(USBCMD::INTE::SET);
         operational.usbcmd.write(USBCMD::RS::SET);
-        while operational.usbsts.read(USBSTS::HCH) == 1 {}
+        while operational.usbsts.read(USBSTS::HCH) != 0 {}
         debug!("xhci controller started!");
     }
 
@@ -141,11 +162,17 @@ impl Registers {
         let base_addr = addr as *mut u8;
         unsafe {
             let capability: NonNull<Capability> = NonNull::new(base_addr).unwrap().cast();
+
+            debug!("capability address :{:#X}", addr);
             let cap_len = capability.as_ref().dw1.read(CAPABILITY_DW1::CAPLENGTH) as isize;
+            debug!("capability len :{:#X}", cap_len);
             let operational: NonNull<Operational> =
                 NonNull::new(base_addr.offset(cap_len)).unwrap().cast();
-            let off_set = capability.as_ref().rtsoff.read(RTSOFF::OFFSET) as isize;
+            debug!("operational address :{:#X}", operational.addr().get());
+
+            let off_set = (capability.as_ref().rtsoff.read(RTSOFF::OFFSET) as isize) << 5;
             let runtime: NonNull<Runtime> = NonNull::new(base_addr.offset(off_set)).unwrap().cast();
+            debug!("runtime address :{:#X}", runtime.addr().get());
             Self {
                 capability: Arc::new(capability),
                 operational: Arc::new(operational),
