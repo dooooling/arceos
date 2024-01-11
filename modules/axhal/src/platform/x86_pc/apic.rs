@@ -1,14 +1,16 @@
 #![allow(dead_code)]
 
+use x2apic::ioapic::IoApic;
+use x2apic::lapic::{LocalApic, LocalApicBuilder, xapic_base};
+use x86_64::instructions::port::Port;
+
 use lazy_init::LazyInit;
 use memory_addr::PhysAddr;
 use spinlock::SpinNoIrq;
-use x2apic::ioapic::IoApic;
-use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder};
-use x86_64::instructions::port::Port;
+
+use crate::mem::phys_to_virt;
 
 use self::vectors::*;
-use crate::mem::phys_to_virt;
 
 pub(super) mod vectors {
     pub const APIC_TIMER_VECTOR: u8 = 0xf0;

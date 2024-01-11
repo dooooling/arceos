@@ -8,6 +8,8 @@
 
 #![no_std]
 
+pub mod capability;
+
 pub use virtio_drivers::transport::pci::bus::{BarInfo, Cam, HeaderType, MemoryBarType, PciError};
 pub use virtio_drivers::transport::pci::bus::{
     CapabilityInfo, Command, DeviceFunction, DeviceFunctionInfo, PciRoot, Status,

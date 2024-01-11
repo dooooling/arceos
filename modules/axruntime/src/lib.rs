@@ -148,11 +148,14 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
 
     info!("Initialize platform devices...");
     axhal::platform_init();
+    for i in 0x23..0x38 {
+        axhal::irq::set_enable(i, true);
+    }
 
     #[cfg(feature = "multitask")]
     axtask::init_scheduler();
 
-    #[cfg(any(feature = "fs", feature = "net", feature = "display"))]
+    #[cfg(any(feature = "fs", feature = "net", feature = "display", feature = "xhci"))]
     {
         #[allow(unused_variables)]
         let all_devices = axdriver::init_drivers();

@@ -6,12 +6,14 @@ use axalloc::{global_allocator, GlobalAllocator};
 use driver_common::DeviceType;
 #[cfg(feature = "bus-pci")]
 use driver_pci::{DeviceFunction, DeviceFunctionInfo, PciRoot};
+use driver_pci::{Command, Status};
+use driver_pci::capability::PciCapabilityIterator;
 use driver_virtio::pci;
 use driver_xhci::XhciController;
 
+use crate::AxDeviceEnum;
 #[cfg(feature = "virtio")]
 use crate::virtio::{self, VirtIoDevMeta};
-use crate::AxDeviceEnum;
 
 pub use super::dummy::*;
 
@@ -45,12 +47,6 @@ register_net_driver!(
 register_block_driver!(
     <virtio::VirtIoBlk as VirtIoDevMeta>::Driver,
     <virtio::VirtIoBlk as VirtIoDevMeta>::Device
-);
-
-#[cfg(display_dev = "virtio-gpu")]
-register_display_driver!(
-    <virtio::VirtIoGpu as VirtIoDevMeta>::Driver,
-    <virtio::VirtIoGpu as VirtIoDevMeta>::Device
 );
 
 #[cfg(display_dev = "virtio-gpu")]
@@ -151,13 +147,14 @@ cfg_if::cfg_if! {
                 return match ( dev_info.class,dev_info.subclass,dev_info.prog_if){
                     (0xC, 0x3, 0x30)=>{
                         let bar_info = root.bar_info(bdf, 0).unwrap();
-                        let caps = root.capabilities(bdf);
+                        let (_status, _command) = root.get_status_command(bdf);
 
+                        let bdf_addr = bdf_addr(&bdf) as usize;
+                        debug!("bdf_addr : {:#X}", bdf_addr);
                         if let driver_pci::BarInfo::Memory{address,size, address_type,..} = bar_info{
                             info!("found a USB compatible device entry. (xHCI)");
-                            info!("bus = {}, device = {}, function = {} io base: {:#X}, type : {:?}", bdf.bus,bdf.device,bdf.function,address,address_type);
-
-                            Some(AxDeviceEnum::Xhci(XhciController::init(phys_to_virt((address as usize).into()).into())))
+                            info!("bus = {}, device = {}, function = {} io base: {:#X}, type : {:?}", bdf.bus, bdf.device, bdf.function, address, address_type);
+                            Some(AxDeviceEnum::Xhci(XhciController::new(phys_to_virt((address as usize).into()).into(), bdf_addr)))
                         }else{
                             None
                         }
@@ -169,4 +166,22 @@ cfg_if::cfg_if! {
             }
         }
     }
+}
+
+fn bdf_addr(bdf: &DeviceFunction) -> *mut u32 {
+    let addr = phys_to_virt(axconfig::PCI_ECAM_BASE.into());
+    let mmio_base = addr.as_ptr() as *mut u32;
+    unsafe { (mmio_base.add((ecma_addr(bdf, 0) >> 2) as usize)) }
+}
+
+fn read_word(bdf: &DeviceFunction, offset: u32) -> u32 {
+    let addr = phys_to_virt(axconfig::PCI_ECAM_BASE.into());
+    let mmio_base = addr.as_ptr() as *mut u32;
+    unsafe { (mmio_base.add((ecma_addr(bdf, offset) >> 2) as usize)).read_volatile() }
+}
+
+fn ecma_addr(bdf: &DeviceFunction, offset: u32) -> u32 {
+    let bdf = (bdf.bus as u32) << 8 | (bdf.device as u32) << 3 | bdf.function as u32;
+    let address = bdf << 12 | offset;
+    address
 }

@@ -92,7 +92,7 @@ mod virtio;
 mod ixgbe;
 
 pub mod prelude;
-mod usb;
+// mod usb;
 
 extern crate driver_xhci;
 

@@ -1,5 +1,5 @@
 use tock_registers::{register_bitfields, register_structs};
-use tock_registers::registers::{ReadWrite, ReadOnly};
+use tock_registers::registers::{ReadOnly, ReadWrite};
 
 register_structs! {
     pub Operational{
@@ -8,9 +8,9 @@ register_structs! {
         (0x08 => pub pagesize:ReadOnly<u32>),
         (0x0C => _rsvd0),
         (0x14 => pub dnctrl:ReadWrite<u32>),
-        (0x18 => pub crcr:ReadWrite<u64>),
+        (0x18 => pub crcr:ReadWrite<u64, CRCR::Register>),
         (0x20 => _rsvd1),
-        (0x30 => pub dcbaap:ReadWrite<u64>),
+        (0x30 => pub dcbaap:ReadWrite<u64, DCBAAP::Register>),
         (0x38 => pub config:ReadWrite<u32, CONFIG::Register>),
         (0x3C => @END),
     }
@@ -50,4 +50,17 @@ register_bitfields! {
         U3E OFFSET(8) NUMBITS(1) [],
         CIE OFFSET(9) NUMBITS(1) [],
     ],
+}
+register_bitfields! {
+    u64,
+    pub DCBAAP [
+        PONITER OFFSET(6) NUMBITS(58) [],
+    ],
+    pub CRCR[
+        RCS OFFSET(0) NUMBITS(1) [],
+        CS OFFSET(1) NUMBITS(1) [],
+        CA OFFSET(2) NUMBITS(1) [],
+        CRR OFFSET(3) NUMBITS(1) [],
+        CRP OFFSET(6) NUMBITS(58) [],
+    ]
 }
