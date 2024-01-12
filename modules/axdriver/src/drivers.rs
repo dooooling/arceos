@@ -154,7 +154,7 @@ cfg_if::cfg_if! {
                         if let driver_pci::BarInfo::Memory{address,size, address_type,..} = bar_info{
                             info!("found a USB compatible device entry. (xHCI)");
                             info!("bus = {}, device = {}, function = {} io base: {:#X}, type : {:?}", bdf.bus, bdf.device, bdf.function, address, address_type);
-                            Some(AxDeviceEnum::Xhci(XhciController::new(phys_to_virt((address as usize).into()).into(), bdf_addr)))
+                            Some(AxDeviceEnum::Xhci(XhciController::new_xhci(phys_to_virt((address as usize).into()).into())))
                         }else{
                             None
                         }
