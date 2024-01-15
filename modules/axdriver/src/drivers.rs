@@ -4,16 +4,16 @@
 
 use axalloc::{global_allocator, GlobalAllocator};
 use driver_common::DeviceType;
+use driver_pci::capability::PciCapabilityIterator;
+use driver_pci::{Command, Status};
 #[cfg(feature = "bus-pci")]
 use driver_pci::{DeviceFunction, DeviceFunctionInfo, PciRoot};
-use driver_pci::{Command, Status};
-use driver_pci::capability::PciCapabilityIterator;
 use driver_virtio::pci;
 use driver_xhci::XhciController;
 
-use crate::AxDeviceEnum;
 #[cfg(feature = "virtio")]
 use crate::virtio::{self, VirtIoDevMeta};
+use crate::AxDeviceEnum;
 
 pub use super::dummy::*;
 
@@ -154,7 +154,7 @@ cfg_if::cfg_if! {
                         if let driver_pci::BarInfo::Memory{address,size, address_type,..} = bar_info{
                             info!("found a USB compatible device entry. (xHCI)");
                             info!("bus = {}, device = {}, function = {} io base: {:#X}, type : {:?}", bdf.bus, bdf.device, bdf.function, address, address_type);
-                            Some(AxDeviceEnum::Xhci(XhciController::new_xhci(phys_to_virt((address as usize).into()).into())))
+                            Some(AxDeviceEnum::Xhci(XhciController::new(phys_to_virt((address as usize).into()).into(), bdf_addr)))
                         }else{
                             None
                         }

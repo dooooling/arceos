@@ -24,7 +24,7 @@ impl Port {
         self.portsc.write(PORTSC::PR.val(1));
         // self.portsc.write(PORTSC::PED.val(1));
         self.portsc.write(PORTSC::WCE.val(1));
-        while self.portsc.read(PORTSC::PR) != 0 {}
+        while self.portsc.read(PORTSC::PR) == 1 {}
     }
 }
 

@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 driver_common = { path = "../driver_common" }
 driver_pci = { path = "../driver_pci" }
+memory_addr = { path = "../memory_addr" }
 tock-registers = "0.8"
 log = "0.4"
 spin = "0.9"
 raw-cpuid = "11.0"
-xhci = "0.9.1"

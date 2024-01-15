@@ -14,7 +14,9 @@ use crate::registers::runtime::ERDP::ERDP;
 use crate::registers::runtime::ERSTBA::ERSTBA;
 use crate::registers::runtime::ERSTSZ::ERSTSZ;
 use crate::registers::runtime::{Runtime, IMAN, IMOD};
-use crate::ring::{CommandRing, EventRingSegmentTableEntry};
+use crate::ring::event::EventRingSegmentTable;
+use crate::ring::CommandRing;
+use crate::virt_to_phys;
 
 pub mod capability;
 pub mod doorbell;
@@ -77,25 +79,23 @@ impl Registers {
     pub fn set_command_ring(&self, ring: &CommandRing) {
         let operational = self.operational();
         operational.crcr.write(CRCR::RCS.val(ring.cycle_bit as u64));
-        operational.crcr.write(CRCR::CS.val(0));
-        operational.crcr.write(CRCR::CA.val(0));
-        operational
-            .crcr
-            .write(CRCR::CRP.val((ring.buf.as_slice().as_ptr() as u64) >> 6));
+        // operational.crcr.write(CRCR::CS.val(0));
+        // operational.crcr.write(CRCR::CA.val(0));
+        operational.crcr.write(
+            CRCR::CRP.val((virt_to_phys(ring.buf.as_slice().as_ptr() as usize) as u64) >> 6),
+        );
     }
 
     pub fn set_device_context_base_address_array(&self, dcbaa: &Vec<DeviceContext>) {
         self.operational()
             .dcbaap
-            .set(dcbaa.as_slice().as_ptr() as u64);
+            .set(virt_to_phys(dcbaa.as_slice().as_ptr() as usize) as u64 >> 6);
     }
     // pub fn set_device_context_base_address_array(&self, erst: &Vec<EventRingSegmentTableEntry>) {
     //     self.operational.dcbaap.set(dcbaap);
     // }
 
-    pub fn set_primary_interrupter(&self, ers_table: &Vec<EventRingSegmentTableEntry>) {
-        let erdp = ers_table[0].data[0] >> 4;
-        error!("erste :\n{:#X}", erdp);
+    pub fn set_primary_interrupter(&self, ers_table: &EventRingSegmentTable) {
         let runtime = self.runtime();
 
         let primary_interrupter = &runtime.ints[0];
@@ -104,10 +104,10 @@ impl Registers {
             .write(ERSTSZ.val(ers_table.len() as u32));
         primary_interrupter
             .erdp
-            .write(ERDP.val(ers_table[0].data[0] >> 4));
+            .write(ERDP.val(ers_table.entry_addr(0) >> 4));
         primary_interrupter
             .erstba
-            .write(ERSTBA.val(ers_table.as_slice().as_ptr() as u64));
+            .write(ERSTBA.val((virt_to_phys(ers_table.addr()) >> 6) as u64));
 
         primary_interrupter.imod.write(IMOD::IMODI.val(4000));
         primary_interrupter.iman.write(IMAN::IP::SET);
@@ -128,6 +128,7 @@ impl Registers {
 
     pub fn reset(&self) {
         let operational = self.operational();
+        operational.usbcmd.write(USBCMD::RS::CLEAR);
         operational.usbcmd.write(USBCMD::INTE::CLEAR);
         operational.usbcmd.write(USBCMD::HSEE::CLEAR);
         operational.usbcmd.write(USBCMD::EWE::CLEAR);
