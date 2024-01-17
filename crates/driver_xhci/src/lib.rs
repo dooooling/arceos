@@ -1,20 +1,24 @@
 #![feature(strict_provenance)]
 #![feature(pointer_is_aligned)]
-#![feature(non_null_convenience)]
+// #![feature(non_null_convenience)]
 #![no_std]
 
 extern crate alloc;
 
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::borrow::ToOwned;
+
 use log::{debug, error};
 use tock_registers::interfaces::{Readable, Writeable};
 
-use crate::registers::{port, Registers};
-use crate::ring::event::{EventRing, EventRingSegmentTable};
-use crate::ring::CommandRing;
-use device::context::DeviceContext;
 use driver_common::{BaseDriverOps, DeviceType};
+
+use crate::device::DeviceManager;
+use crate::registers::{port, Registers};
+use crate::registers::capability::DBOFF;
+use crate::registers::doorbell::DOORBELL;
+use crate::ring::command::CommandRing;
+use crate::ring::event::{CommandCompletionEvent, EventRing, EventRingSegmentTable, PortStatusChangeEvent};
+use crate::ring::TrbType;
 
 mod device;
 mod registers;
@@ -23,9 +27,9 @@ mod ring;
 pub struct XhciController {
     base_addr: usize,
     register: Registers,
-    command_ring: CommandRing,
     event_ring: EventRing,
-    device_contexts: Vec<DeviceContext>,
+    command_ring: CommandRing,
+    device_manager: DeviceManager,
     ers_table: EventRingSegmentTable,
 }
 
@@ -55,15 +59,15 @@ impl XhciController {
             let context_size = register.context_size();
             assert_eq!(context_size, 0, "not support 64-bit context size");
 
-            let dcbaa = vec![DeviceContext::default(); (max_slots + 1) as usize];
-            register.set_device_context_base_address_array(&dcbaa);
+            let dboff = register.capability().dboff.read(DBOFF::OFFSET) << 2;
+            let device_manager = DeviceManager::new(max_slots as usize, address + dboff as usize);
+            register.set_device_context_base_address_array(device_manager.device_contexts());
 
-            let mut command_ring = CommandRing::with_capacity(32);
+            let mut command_ring = CommandRing::with_capacity(1);
             command_ring.cycle_bit = true;
             register.set_command_ring(&command_ring);
 
             let mut event_ring = EventRing::with_capacity(32);
-
             let mut ers_table = EventRingSegmentTable::with_capacity(1);
             ers_table.set_event_ring_data(0, &event_ring);
             register.set_primary_interrupter(&ers_table);
@@ -77,9 +81,9 @@ impl XhciController {
 
             register.run();
 
-            let port_set = port::PortSet::new(register.max_ports(), register.operational_addr());
 
-            for port in port_set {
+            let mut port_set = port::PortSet::new(register.max_ports(), register.operational_addr());
+            for port in &mut port_set {
                 let ccs = port.as_ref().connected();
                 if ccs {
                     port.as_ref().reset();
@@ -88,21 +92,45 @@ impl XhciController {
                 }
             }
 
-            // loop {
-            //     if let Some(trb) = event_ring.next(&register) {
-            //         error!("trb - >>>>>>>>>>>>>>>>>>>>>> : {:#X}", trb);
-            //     }
-            // }
+            loop {
+                if let Some(trb) = event_ring.next(&register) {
+                    match trb.trb_type() {
+                        TrbType::PortStatusChange => {
+                            let port_status_change: PortStatusChangeEvent = trb.clone().into();
+                            let port_id = port_status_change.port_id();
+                            let completion_code = port_status_change.completion_code();
+                            port_set.enable_port(port_id);
+                            command_ring.push_enable_slot_command();
+                            device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
+                            device_manager.doorbells().doorbell.write(DOORBELL::DB_STREAM_ID.val(0));
+                            debug!("{:?}", port_status_change);
+                        }
+                        TrbType::CommandCompletion => {
+                            let command_completion: CommandCompletionEvent = trb.clone().into();
+                            debug!("{:?}", command_completion);
+                        }
+                        _ => {
+                            error!(" unimplemented trb type !")
+                        }
+                    }
+                }
+            }
 
             Self {
                 base_addr: address,
                 register,
                 command_ring,
                 event_ring,
-                device_contexts: dcbaa,
+                device_manager,
                 ers_table,
             }
         }
+    }
+}
+
+impl Drop for XhciController {
+    fn drop(&mut self) {
+        debug!("123");
     }
 }
 

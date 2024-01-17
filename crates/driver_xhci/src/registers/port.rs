@@ -1,8 +1,8 @@
 use core::ptr::NonNull;
 
+use tock_registers::{register_bitfields, register_structs};
 use tock_registers::interfaces::{Readable, Writeable};
 use tock_registers::registers::ReadWrite;
-use tock_registers::{register_bitfields, register_structs};
 
 use crate::registers::port;
 
@@ -35,6 +35,7 @@ register_bitfields! {
         PED OFFSET(1) NUMBITS(1) [],
         OCA OFFSET(3) NUMBITS(1) [],
         PR OFFSET(4) NUMBITS(1) [],
+        PRC OFFSET(21) NUMBITS(1) [],
         WCE OFFSET(25) NUMBITS(1) [],
     ],
     pub PORTPMSC [
@@ -48,28 +49,38 @@ register_bitfields! {
     ],
 }
 
+
 pub struct PortSet {
     max_ports: u32,
-    operational_addr: usize,
+    addr: *mut Port,
     index: u32,
 }
 
 impl PortSet {
     pub fn new(max_ports: u32, operational_addr: usize) -> Self {
+        let addr = unsafe { (operational_addr as *mut u8).offset(0x400) }.cast();
         Self {
             max_ports,
-            operational_addr,
+            addr,
             index: 0,
         }
     }
+
+    pub fn enable_port(&self, port_id: u8) {
+        unsafe { self.addr.add(Self::id_to_index(port_id)).read().portsc.write(PORTSC::PRC::SET); }
+    }
+
+    pub fn id_to_index(id: u8) -> usize {
+        (id - 1) as usize
+    }
 }
 
-impl Iterator for PortSet {
+impl Iterator for &mut PortSet {
     type Item = NonNull<Port>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.max_ports {
             let addr = unsafe {
-                (self.operational_addr as *mut u8).offset(0x400 + (0x10 * self.index) as isize)
+                self.addr.offset(self.index as isize)
             };
             self.index += 1;
             return Some(NonNull::new(addr).unwrap().cast());

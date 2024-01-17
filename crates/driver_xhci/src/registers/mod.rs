@@ -2,20 +2,20 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 
-use log::{debug, error};
+use log::debug;
 use tock_registers::interfaces::{Readable, Writeable};
 
 use crate::device::context::DeviceContext;
 use crate::registers::capability::{
     Capability, CAPABILITY_DW1, HCCPARAMS1, HCSPARAMS1, HCSPARAMS2, RTSOFF,
 };
-use crate::registers::operational::{Operational, CONFIG, CRCR, USBCMD, USBSTS};
+use crate::registers::operational::{CONFIG, CRCR, Operational, USBCMD, USBSTS};
+use crate::registers::runtime::{IMAN, IMOD, Runtime};
 use crate::registers::runtime::ERDP::ERDP;
 use crate::registers::runtime::ERSTBA::ERSTBA;
 use crate::registers::runtime::ERSTSZ::ERSTSZ;
-use crate::registers::runtime::{Runtime, IMAN, IMOD};
+use crate::ring::command::CommandRing;
 use crate::ring::event::EventRingSegmentTable;
-use crate::ring::CommandRing;
 use crate::virt_to_phys;
 
 pub mod capability;

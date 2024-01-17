@@ -13,7 +13,7 @@ register_structs! {
 
 register_bitfields! {
     u32,
-    DOORBELL [
+    pub DOORBELL [
         DB_TARGET OFFSET(0) NUMBITS(8) [],
         DB_STREAM_ID OFFSET(16) NUMBITS(16) [],
     ],

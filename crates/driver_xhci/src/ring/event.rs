@@ -1,11 +1,10 @@
-use crate::registers::Registers;
-use crate::ring::GenericTrb;
-use crate::virt_to_phys;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::alloc::Layout;
-use core::mem::size_of;
-use log::debug;
+use core::fmt::{Debug, Formatter};
+
+use crate::registers::Registers;
+use crate::ring::{GenericTrb, TrbType};
+use crate::virt_to_phys;
 
 #[derive(Default, Debug)]
 pub struct EventRing {
@@ -17,7 +16,7 @@ pub struct EventRing {
 impl EventRing {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            buf: vec![GenericTrb::default(); capacity],
+            buf: GenericTrb::aligned_vec(64, capacity),
             cycle_bit: true,
             write_idx: 0,
         }
@@ -25,14 +24,9 @@ impl EventRing {
 
     pub fn next(&mut self, registers: &Registers) -> Option<&GenericTrb> {
         let trb = &self.buf[self.write_idx];
-        debug!("pcs : {:?}", trb.pcs());
         if trb.pcs() != self.cycle_bit {
             return None;
         }
-        debug!(
-            "trb address : {:?}",
-            (&self.buf[self.write_idx] as *const GenericTrb).addr()
-        );
         self.write_idx += 1;
         if self.write_idx == self.buf.len() {
             self.write_idx = 0;
@@ -51,6 +45,69 @@ impl EventRing {
         self.buf.as_ptr().addr()
     }
 }
+
+
+#[derive(Default)]
+pub struct PortStatusChangeEvent(GenericTrb);
+
+impl PortStatusChangeEvent {
+    pub fn port_id(&self) -> u8 {
+        (self.0.data_low >> 24) as u8
+    }
+    pub fn completion_code(&self) -> u8 {
+        (self.0.status >> 24) as u8
+    }
+}
+
+impl Debug for PortStatusChangeEvent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "port status change event\n\tport id : {}  completion code : {}", self.port_id(), self.completion_code())
+    }
+}
+
+
+impl From<GenericTrb> for PortStatusChangeEvent {
+    fn from(value: GenericTrb) -> Self {
+        assert_eq!(value.trb_type(), TrbType::PortStatusChange);
+        Self(value)
+    }
+}
+
+#[derive(Default)]
+pub struct CommandCompletionEvent(GenericTrb);
+
+impl CommandCompletionEvent {
+    pub fn slot_id(&self) -> u8 {
+        (self.0.control >> 24) as u8
+    }
+    pub fn command_trb_pointer(&self) -> u64 {
+        self.0.data_low as u64 | (self.0.data_high as u64) << 32
+    }
+    pub fn completion_code(&self) -> u8 {
+        (self.0.status >> 24) as u8
+    }
+}
+
+impl Debug for CommandCompletionEvent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "command completion event\n\tslot id : {}  completion_code : {}  command trb pointer : {:#X}",
+               self.slot_id(),
+               self.completion_code(),
+               self.command_trb_pointer())
+    }
+}
+
+
+impl From<GenericTrb> for CommandCompletionEvent {
+    fn from(value: GenericTrb) -> Self {
+        assert_eq!(value.trb_type(), TrbType::CommandCompletion);
+        Self(value)
+    }
+}
+
+
+#[derive(Default, Debug)]
+pub struct TransferEvent(GenericTrb);
 
 #[repr(C)]
 #[derive(Default, Clone, Debug)]
@@ -78,9 +135,8 @@ pub struct EventRingSegmentTable {
 impl EventRingSegmentTable {
     pub fn with_capacity(capacity: usize) -> Self {
         let layout =
-            Layout::from_size_align(size_of::<EventRingSegmentTableEntry>() * capacity, 64)
-                .unwrap();
-
+            Layout::array::<EventRingSegmentTableEntry>(capacity)
+                .unwrap().align_to(64).unwrap();
         unsafe {
             let addr = alloc::alloc::alloc(layout).cast::<EventRingSegmentTableEntry>();
             Self {
@@ -103,11 +159,5 @@ impl EventRingSegmentTable {
     }
     pub fn len(&self) -> u64 {
         self.entries.len() as u64
-    }
-}
-
-impl Drop for EventRingSegmentTable {
-    fn drop(&mut self) {
-        unsafe { alloc::alloc::dealloc(self.entries.as_mut_ptr().cast(), self.entries_layout) }
     }
 }

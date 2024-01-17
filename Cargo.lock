@@ -8,7 +8,7 @@ version = "9.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb711c57d60565ba8f6523eb371e6243639617d817b4df1ae09af250af1af411"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.8.1",
 ]
 
 [[package]]
@@ -217,14 +217,14 @@ dependencies = [
 name = "arm_gic"
 version = "0.1.0"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.8.1",
 ]
 
 [[package]]
 name = "arm_pl011"
 version = "0.1.0"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.8.1",
 ]
 
 [[package]]
@@ -287,7 +287,9 @@ dependencies = [
  "driver_net",
  "driver_pci",
  "driver_virtio",
+ "driver_xhci",
  "log",
+ "tock-registers 0.9.0",
 ]
 
 [[package]]
@@ -390,7 +392,7 @@ dependencies = [
  "sbi-rt",
  "spinlock",
  "static_assertions",
- "tock-registers",
+ "tock-registers 0.8.1",
  "x2apic",
  "x86",
  "x86_64",
@@ -523,7 +525,7 @@ source = "git+https://github.com/lhw2002426/bcm2835-sdhci.git?rev=e974f16#e974f1
 dependencies = [
  "aarch64-cpu",
  "log",
- "tock-registers",
+ "tock-registers 0.8.1",
  "volatile 0.2.7",
 ]
 
@@ -900,6 +902,7 @@ dependencies = [
 name = "driver_pci"
 version = "0.1.0"
 dependencies = [
+ "tock-registers 0.8.1",
  "virtio-drivers",
 ]
 
@@ -915,10 +918,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver_xhci"
+version = "0.1.0"
+dependencies = [
+ "driver_common",
+ "driver_pci",
+ "log",
+ "memory_addr",
+ "raw-cpuid 11.0.1",
+ "spin 0.9.8",
+ "tock-registers 0.8.1",
+]
+
+[[package]]
 name = "dw_apb_uart"
 version = "0.1.0"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.8.1",
 ]
 
 [[package]]
@@ -1844,10 +1860,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "696941a0aee7e276a165a978b37918fd5d22c55c3d6bda197813070ca9c0f21c"
 
 [[package]]
-name = "toml_datetime"
-version = "0.6.3"
+name = "tock-registers"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+checksum = "2b9e2fdb3a1e862c0661768b7ed25390811df1947a8acbfbefe09b47078d93c4"
+
+[[package]]
+name = "toml_datetime"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
 
 [[package]]
 name = "toml_edit"
