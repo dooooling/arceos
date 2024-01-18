@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::alloc::Layout;
-use crate::ring::GenericTrb;
 
 #[repr(C, align(64))]
 #[derive(Default, Clone)]
@@ -39,3 +38,15 @@ pub struct EndpointContext {
     c: u32,
     _rsvd: [u32; 3],
 }
+
+#[repr(C)]
+#[derive(Default, Clone)]
+pub struct InputContext {
+    drop_context: u32,
+    add_context: u32,
+    _rsvd: [u32; 5],
+    control: u32,
+    device: DeviceContext,
+}
+
+pub struct InputControlContext {}

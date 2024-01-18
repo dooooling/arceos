@@ -73,6 +73,12 @@ impl PortSet {
     pub fn id_to_index(id: u8) -> usize {
         (id - 1) as usize
     }
+
+    pub fn get_by_id(&self, port_id: u8) -> &Port {
+        unsafe {
+            self.addr.add(Self::id_to_index(port_id)).as_ref().unwrap()
+        }
+    }
 }
 
 impl Iterator for &mut PortSet {

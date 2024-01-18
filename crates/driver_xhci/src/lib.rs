@@ -7,18 +7,19 @@ extern crate alloc;
 
 use alloc::borrow::ToOwned;
 
-use log::{debug, error};
+use log::{debug, error, warn};
 use tock_registers::interfaces::{Readable, Writeable};
 
 use driver_common::{BaseDriverOps, DeviceType};
 
+use crate::device::context::DeviceContext;
 use crate::device::DeviceManager;
 use crate::registers::{port, Registers};
 use crate::registers::capability::DBOFF;
 use crate::registers::doorbell::DOORBELL;
+use crate::ring::{GenericTrb, TrbType};
 use crate::ring::command::CommandRing;
 use crate::ring::event::{CommandCompletionEvent, EventRing, EventRingSegmentTable, PortStatusChangeEvent};
-use crate::ring::TrbType;
 
 mod device;
 mod registers;
@@ -60,7 +61,7 @@ impl XhciController {
             assert_eq!(context_size, 0, "not support 64-bit context size");
 
             let dboff = register.capability().dboff.read(DBOFF::OFFSET) << 2;
-            let device_manager = DeviceManager::new(max_slots as usize, address + dboff as usize);
+            let mut device_manager = DeviceManager::new(max_slots as usize, address + dboff as usize);
             register.set_device_context_base_address_array(device_manager.device_contexts());
 
             let mut command_ring = CommandRing::with_capacity(1);
@@ -97,17 +98,72 @@ impl XhciController {
                     match trb.trb_type() {
                         TrbType::PortStatusChange => {
                             let port_status_change: PortStatusChangeEvent = trb.clone().into();
+                            debug!("{:?}", port_status_change);
                             let port_id = port_status_change.port_id();
                             let completion_code = port_status_change.completion_code();
                             port_set.enable_port(port_id);
                             command_ring.push_enable_slot_command();
                             device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
                             device_manager.doorbells().doorbell.write(DOORBELL::DB_STREAM_ID.val(0));
-                            debug!("{:?}", port_status_change);
+                            device_manager.set_addressing_port(port_id);
                         }
                         TrbType::CommandCompletion => {
                             let command_completion: CommandCompletionEvent = trb.clone().into();
                             debug!("{:?}", command_completion);
+                            let addr = phys_to_virt(command_completion.command_trb_pointer() as usize);
+                            let cmd_trb = &*(addr as *mut GenericTrb);
+                            debug!("{:?}", cmd_trb);
+
+                            match cmd_trb.trb_type() {
+                                TrbType::Reserved => {}
+                                TrbType::Normal => {}
+                                TrbType::SetupStage => {}
+                                TrbType::DataStage => {}
+                                TrbType::StatusStage => {}
+                                TrbType::Isoch => {}
+                                TrbType::Link => {}
+                                TrbType::EventData => {}
+                                TrbType::NoOp => {}
+                                TrbType::EnableSlot => {
+                                    match device_manager.get_addressing_port() {
+                                        Some(port_id) => {
+                                            let port = port_set.get_by_id(port_id);
+                                            let slot_id = command_completion.slot_id();
+                                            assert!(slot_id > 0 && slot_id < device_manager.devices().len() as u8, "invalid slot id");
+                                            let device_context = DeviceContext::default();
+
+                                        }
+                                        None => {
+                                            warn!("addressing port is None");
+                                        }
+                                    }
+                                }
+                                TrbType::DisableSlot => {}
+                                TrbType::AddressDevice => {}
+                                TrbType::ConfigureEndpoint => {}
+                                TrbType::EvaluateContext => {}
+                                TrbType::ResetEndpoint => {}
+                                TrbType::StopEndpoint => {}
+                                TrbType::SetTrDequeuePointer => {}
+                                TrbType::ResetDevice => {}
+                                TrbType::ForceEvent => {}
+                                TrbType::NegotiateBandwidth => {}
+                                TrbType::SetLatencyToleranceValue => {}
+                                TrbType::GetPortBandwidth => {}
+                                TrbType::ForceHeader => {}
+                                TrbType::NoOpCmd => {}
+                                TrbType::GetExtendedProperty => {}
+                                TrbType::SetExtendedProperty => {}
+                                TrbType::Transfer => {}
+                                TrbType::CommandCompletion => {}
+                                TrbType::PortStatusChange => {}
+                                TrbType::BandwidthRequest => {}
+                                TrbType::Doorbell => {}
+                                TrbType::HostController => {}
+                                TrbType::DeviceNotification => {}
+                                TrbType::MfindexWrap => {}
+                                _ => {}
+                            }
                         }
                         _ => {
                             error!(" unimplemented trb type !")
@@ -169,4 +225,9 @@ fn current_cpu_id() -> usize {
 #[inline]
 pub const fn virt_to_phys(vaddr: usize) -> usize {
     vaddr - 0xffff_ff80_0000_0000
+}
+
+#[inline]
+pub const fn phys_to_virt(paddr: usize) -> usize {
+    paddr + 0xffff_ff80_0000_0000
 }
