@@ -20,16 +20,38 @@ impl CommandRing {
         }
     }
 
-    pub fn push_enable_slot_command(&mut self) {
-        let mut trb = GenericTrb::default();
-        trb.set_trb_type(TrbType::EnableSlot);
-        trb.set_pcs(self.cycle_bit);
+    fn push_command(&mut self, trb: GenericTrb) {
         self.buf[self.write_idx] = trb;
         self.write_idx += 1;
         if self.write_idx + 1 == self.buf.len() {
             self.back_to_head();
         }
     }
+
+    pub fn push_enable_slot_command(&mut self) {
+        let mut trb = GenericTrb::default();
+        trb.set_trb_type(TrbType::EnableSlot);
+        trb.set_pcs(self.cycle_bit);
+        self.push_command(trb);
+    }
+
+    pub fn push_address_device_command(&mut self, input_context_pointer: u64, slot_id: u8) {
+        assert_eq!((input_context_pointer & 0xF), 0);
+        let mut trb = GenericTrb::default();
+        trb.set_trb_type(TrbType::AddressDevice);
+        trb.set_pcs(self.cycle_bit);
+        trb.set_pointer(input_context_pointer);
+        trb.set_slot_id(slot_id);
+        self.push_command(trb);
+    }
+
+    pub fn push_no_op_command(&mut self) {
+        let mut trb = GenericTrb::default();
+        trb.set_trb_type(TrbType::NoOp);
+        trb.set_pcs(self.cycle_bit);
+        self.push_command(trb);
+    }
+
 
     fn back_to_head(&mut self) {
         let mut link_trb = LinkTrb::new(virt_to_phys(self.buf.as_ptr().addr()));

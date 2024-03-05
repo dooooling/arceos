@@ -13,6 +13,14 @@ pub struct EventRing {
     pub write_idx: usize,
 }
 
+impl GenericTrb{
+    pub fn completion_code(&self) -> u8 {
+        (self.status >> 24) as u8
+    }
+    pub fn command_trb_pointer(&self) -> u64 {
+        self.data_low as u64 | (self.data_high as u64) << 32
+    }
+}
 impl EventRing {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -54,14 +62,12 @@ impl PortStatusChangeEvent {
     pub fn port_id(&self) -> u8 {
         (self.0.data_low >> 24) as u8
     }
-    pub fn completion_code(&self) -> u8 {
-        (self.0.status >> 24) as u8
-    }
+
 }
 
 impl Debug for PortStatusChangeEvent {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "port status change event\n\tport id : {}  completion code : {}", self.port_id(), self.completion_code())
+        write!(f, "port status change event\n\tport id : {}  completion code : {}", self.port_id(), self.0.completion_code())
     }
 }
 
@@ -83,16 +89,13 @@ impl CommandCompletionEvent {
     pub fn command_trb_pointer(&self) -> u64 {
         self.0.data_low as u64 | (self.0.data_high as u64) << 32
     }
-    pub fn completion_code(&self) -> u8 {
-        (self.0.status >> 24) as u8
-    }
 }
 
 impl Debug for CommandCompletionEvent {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "command completion event\n\tslot id : {}  completion_code : {}  command trb pointer : {:#X}",
                self.slot_id(),
-               self.completion_code(),
+               self.0.completion_code(),
                self.command_trb_pointer())
     }
 }
@@ -108,6 +111,22 @@ impl From<GenericTrb> for CommandCompletionEvent {
 
 #[derive(Default, Debug)]
 pub struct TransferEvent(GenericTrb);
+
+impl TransferEvent {
+    pub fn slot_id(&self) -> u8 {
+        (self.0.control >> 24) as u8
+    }
+    pub fn trb_pointer(&self) -> u64 {
+        self.0.data_low as u64 | (self.0.data_high as u64) << 32
+    }
+}
+
+impl From<GenericTrb> for TransferEvent {
+    fn from(value: GenericTrb) -> Self {
+        assert_eq!(value.trb_type(), TrbType::Transfer);
+        Self(value)
+    }
+}
 
 #[repr(C)]
 #[derive(Default, Clone, Debug)]

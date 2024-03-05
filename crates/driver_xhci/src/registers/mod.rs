@@ -86,7 +86,7 @@ impl Registers {
         );
     }
 
-    pub fn set_device_context_base_address_array(&self, dcbaa: &Vec<DeviceContext>) {
+    pub fn set_device_context_base_address_array(&self, dcbaa: &Vec<u64>) {
         self.operational()
             .dcbaap
             .set(virt_to_phys(dcbaa.as_slice().as_ptr() as usize) as u64 >> 6);

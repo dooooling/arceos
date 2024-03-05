@@ -2,8 +2,11 @@ use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::fmt::{Formatter, UpperHex};
 
+use crate::ring::CompletionCode::Invalid;
+
 pub mod event;
 pub mod command;
+pub mod transfer;
 
 
 pub const TRB_CONTROL_TRB_TYPE_SHIFT: u8 = 10;
@@ -51,6 +54,15 @@ impl GenericTrb {
     }
     pub fn set_trb_type(&mut self, trb_type: TrbType) {
         self.control |= ((trb_type as u32) << TRB_CONTROL_TRB_TYPE_SHIFT);
+    }
+
+    pub fn set_slot_id(&mut self, slot_id: u8) {
+        self.control |= (slot_id as u32) << 24;
+    }
+
+    pub fn set_pointer(&mut self, pointer: u64) {
+        self.data_low |= (pointer as u32) & 0xFFFFFFF0;
+        self.data_high |= (pointer >> 32) as u32;
     }
 
     /// cycle bit
@@ -197,4 +209,93 @@ impl From<u8> for TrbType {
         }
     }
 }
+
+pub(crate) enum CompletionCode {
+    Invalid = 0,
+    Success = 1,
+    DataBufferError = 2,
+    BabbleDetectedError = 3,
+    USBTransactionError = 4,
+    TRBError = 5,
+    StallError = 6,
+    ResourceError = 7,
+    BandwidthError = 8,
+    NoSlotsAvailableError = 9,
+    InvalidStreamTypeError = 10,
+    SlotNotEnabledError = 11,
+    EndpointNotEnabledError = 12,
+    ShortPacket = 13,
+    RingUnderrun = 14,
+    RingOverrun = 15,
+    VFEventRingFullError = 16,
+    ParameterError = 17,
+    BandwidthOverrunError = 18,
+    ContextStateError = 19,
+    NoPingResponseError = 20,
+    EventRingFullError = 21,
+    IncompatibleDeviceError = 22,
+    MissedServiceError = 23,
+    CommandRingStopped = 24,
+    CommandAborted = 25,
+    Stopped = 26,
+    StoppedLengthInvalid = 27,
+    StoppedShortPacket = 28,
+    MaxExitLatencyTooLargeError = 29,
+    Reserved = 30,
+    IsochBufferOverrun = 31,
+    EventLostError = 32,
+    UndefinedError = 33,
+    InvalidStreamIDError = 34,
+    SecondaryBandwidthError = 35,
+    SplitTransactionError = 36,
+    Reserved1 = 37,
+}
+
+impl From<u8> for CompletionCode {
+    fn from(value: u8) -> Self {
+        use crate::ring::CompletionCode::*;
+        match value {
+            0 => Invalid,
+            1 => Success,
+            2 => DataBufferError,
+            3 => BabbleDetectedError,
+            4 => USBTransactionError,
+            5 => TRBError,
+            6 => StallError,
+            7 => ResourceError,
+            8 => BandwidthError,
+            9 => NoSlotsAvailableError,
+            10 => InvalidStreamTypeError,
+            11 => SlotNotEnabledError,
+            12 => EndpointNotEnabledError,
+            13 => ShortPacket,
+            14 => RingUnderrun,
+            15 => RingOverrun,
+            16 => VFEventRingFullError,
+            17 => ParameterError,
+            18 => BandwidthOverrunError,
+            19 => ContextStateError,
+            20 => NoPingResponseError,
+            21 => EventRingFullError,
+            22 => IncompatibleDeviceError,
+            23 => MissedServiceError,
+            24 => CommandRingStopped,
+            25 => CommandAborted,
+            26 => Stopped,
+            27 => StoppedLengthInvalid,
+            28 => StoppedShortPacket,
+            29 => MaxExitLatencyTooLargeError,
+            30 => Reserved,
+            31 => IsochBufferOverrun,
+            32 => EventLostError,
+            33 => UndefinedError,
+            34 => InvalidStreamIDError,
+            35 => SecondaryBandwidthError,
+            36 => SplitTransactionError,
+            _ => Reserved1
+        }
+    }
+}
+
+
 

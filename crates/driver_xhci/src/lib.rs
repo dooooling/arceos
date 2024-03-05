@@ -7,19 +7,22 @@ extern crate alloc;
 
 use alloc::borrow::ToOwned;
 
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use tock_registers::interfaces::{Readable, Writeable};
 
 use driver_common::{BaseDriverOps, DeviceType};
 
-use crate::device::context::DeviceContext;
-use crate::device::DeviceManager;
+use crate::device::{Device, DeviceManager, InitPhase};
+use crate::device::context::{DeviceContext, InputContext};
+use crate::device::descriptor::DeviceDescriptor;
 use crate::registers::{port, Registers};
 use crate::registers::capability::DBOFF;
 use crate::registers::doorbell::DOORBELL;
-use crate::ring::{GenericTrb, TrbType};
+use crate::ring::{CompletionCode, GenericTrb, TrbType};
 use crate::ring::command::CommandRing;
-use crate::ring::event::{CommandCompletionEvent, EventRing, EventRingSegmentTable, PortStatusChangeEvent};
+use crate::ring::CompletionCode::{ShortPacket, Success};
+use crate::ring::event::{CommandCompletionEvent, EventRing, EventRingSegmentTable, PortStatusChangeEvent, TransferEvent};
+use crate::ring::transfer::TransferRing;
 
 mod device;
 mod registers;
@@ -64,7 +67,7 @@ impl XhciController {
             let mut device_manager = DeviceManager::new(max_slots as usize, address + dboff as usize);
             register.set_device_context_base_address_array(device_manager.device_contexts());
 
-            let mut command_ring = CommandRing::with_capacity(1);
+            let mut command_ring = CommandRing::with_capacity(32);
             command_ring.cycle_bit = true;
             register.set_command_ring(&command_ring);
 
@@ -95,12 +98,12 @@ impl XhciController {
 
             loop {
                 if let Some(trb) = event_ring.next(&register) {
+                    let completion_code: CompletionCode = trb.completion_code().into();
                     match trb.trb_type() {
                         TrbType::PortStatusChange => {
                             let port_status_change: PortStatusChangeEvent = trb.clone().into();
                             debug!("{:?}", port_status_change);
                             let port_id = port_status_change.port_id();
-                            let completion_code = port_status_change.completion_code();
                             port_set.enable_port(port_id);
                             command_ring.push_enable_slot_command();
                             device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
@@ -115,58 +118,80 @@ impl XhciController {
                             debug!("{:?}", cmd_trb);
 
                             match cmd_trb.trb_type() {
-                                TrbType::Reserved => {}
-                                TrbType::Normal => {}
-                                TrbType::SetupStage => {}
-                                TrbType::DataStage => {}
-                                TrbType::StatusStage => {}
-                                TrbType::Isoch => {}
-                                TrbType::Link => {}
-                                TrbType::EventData => {}
-                                TrbType::NoOp => {}
                                 TrbType::EnableSlot => {
                                     match device_manager.get_addressing_port() {
                                         Some(port_id) => {
                                             let port = port_set.get_by_id(port_id);
                                             let slot_id = command_completion.slot_id();
-                                            assert!(slot_id > 0 && slot_id < device_manager.devices().len() as u8, "invalid slot id");
-                                            let device_context = DeviceContext::default();
+                                            error!("slot id {:?}",slot_id);
+                                            assert!(slot_id > 0 && slot_id < device_manager.devices().capacity() as u8, "invalid slot id");
+                                            let mut device_context = DeviceContext::default();
+                                            let mut input_context = InputContext::default();
 
+                                            if device_manager.devices().get(slot_id as usize).unwrap().is_some() {
+                                                panic!("device already allocated!");
+                                            }
+
+                                            input_context.enable_slot_context();
+                                            let slot = input_context.mut_slot();
+                                            slot.set_route_string(0);
+                                            slot.set_root_hub_number(port_id);
+                                            slot.set_context_entries(1);
+                                            slot.set_speed(port.speed());
+
+                                            let transfer_ring = TransferRing::with_capacity(32);
+                                            input_context.init_default_control_endpoint(port.max_packet_size() as u16, virt_to_phys(transfer_ring.buf.as_ptr().addr()) as u64);
+
+                                            device_manager.set_context(slot_id as usize, virt_to_phys(((&mut device_context) as *mut DeviceContext).addr()) as u64);
+                                            command_ring.push_address_device_command(virt_to_phys((&input_context as *const InputContext).addr()) as u64, slot_id);
+                                            let device = Device {
+                                                slot_id,
+                                                input_context,
+                                                device_context,
+                                                doorbell: device_manager.doorbell_at(slot_id as usize),
+                                                transfer_ring,
+                                                device_descriptor_buf: [0; 256],
+                                                init_phase: InitPhase::Uninitialized,
+                                            };
+                                            device_manager.set_device(slot_id as usize, device);
+
+                                            device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
+                                            device_manager.doorbells().doorbell.write(DOORBELL::DB_STREAM_ID.val(0));
                                         }
                                         None => {
                                             warn!("addressing port is None");
                                         }
                                     }
                                 }
-                                TrbType::DisableSlot => {}
-                                TrbType::AddressDevice => {}
-                                TrbType::ConfigureEndpoint => {}
-                                TrbType::EvaluateContext => {}
-                                TrbType::ResetEndpoint => {}
-                                TrbType::StopEndpoint => {}
-                                TrbType::SetTrDequeuePointer => {}
-                                TrbType::ResetDevice => {}
-                                TrbType::ForceEvent => {}
-                                TrbType::NegotiateBandwidth => {}
-                                TrbType::SetLatencyToleranceValue => {}
-                                TrbType::GetPortBandwidth => {}
-                                TrbType::ForceHeader => {}
-                                TrbType::NoOpCmd => {}
-                                TrbType::GetExtendedProperty => {}
-                                TrbType::SetExtendedProperty => {}
-                                TrbType::Transfer => {}
-                                TrbType::CommandCompletion => {}
-                                TrbType::PortStatusChange => {}
-                                TrbType::BandwidthRequest => {}
-                                TrbType::Doorbell => {}
-                                TrbType::HostController => {}
-                                TrbType::DeviceNotification => {}
-                                TrbType::MfindexWrap => {}
+                                TrbType::AddressDevice => {
+                                    device_manager.init_device(command_completion.slot_id() as _);
+                                }
+                                _ => {
+                                    error!("unimplemented command completion event : {:?}!", cmd_trb.trb_type());
+                                }
+                            }
+                        }
+                        TrbType::Transfer => {
+                            info!("transfer device event!");
+                            match completion_code {
+                                Success | ShortPacket => {
+                                    let transfer_event: TransferEvent = trb.clone().into();
+                                    let addr = phys_to_virt(trb.command_trb_pointer() as usize);
+                                    let trb = &*(addr as *mut GenericTrb);
+                                    info!("transfer trb type: {:?}",trb.trb_type());
+                                    let device = device_manager
+                                        .devices_mut()
+                                        .get_mut(transfer_event.slot_id() as usize)
+                                        .unwrap()
+                                        .as_mut()
+                                        .unwrap();
+                                    device_manager.process_transfer_event(transfer_event.slot_id() as usize);
+                                }
                                 _ => {}
                             }
                         }
                         _ => {
-                            error!(" unimplemented trb type !")
+                            error!("unimplemented trb type : {:?}",trb.trb_type());
                         }
                     }
                 }
