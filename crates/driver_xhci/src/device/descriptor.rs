@@ -1,4 +1,5 @@
 use core::fmt::{Debug, Display, Formatter};
+use core::mem::size_of;
 
 #[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
@@ -20,20 +21,20 @@ pub(crate) struct DeviceDescriptor {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-#[repr(C)]
+#[repr(packed)]
 pub(crate) struct ConfigurationDescriptor {
     pub b_length: u8,
-    b_descriptor_type: u8,
-    w_total_length: u16,
-    b_num_interfaces: u8,
-    b_configuration_value: u8,
-    i_configuration: u8,
-    bm_attributes: u8,
-    b_max_power: u8,
+    pub b_descriptor_type: u8,
+    pub w_total_length: u16,
+    pub b_num_interfaces: u8,
+    pub b_configuration_value: u8,
+    pub i_configuration: u8,
+    pub bm_attributes: u8,
+    pub b_max_power: u8,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-#[repr(C)]
+#[repr(packed)]
 pub(crate) struct InterfaceDescriptor {
     pub b_length: u8,
     b_descriptor_type: u8,
@@ -47,7 +48,7 @@ pub(crate) struct InterfaceDescriptor {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-#[repr(C)]
+#[repr(packed)]
 pub(crate) struct HIDDescriptor {
     pub b_length: u8,
     b_descriptor_type: u8,
@@ -59,14 +60,14 @@ pub(crate) struct HIDDescriptor {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-#[repr(C)]
+#[repr(packed)]
 pub(crate) struct EndpointDescriptor {
     pub b_length: u8,
-    b_descriptor_type: u8,
-    b_endpoint_address: u8,
-    bm_attributes: u8,
-    w_max_packet_size: u16,
-    b_interval: u8,
+    pub b_descriptor_type: u8,
+    pub b_endpoint_address: u8,
+    pub bm_attributes: u8,
+    pub w_max_packet_size: u16,
+    pub b_interval: u8,
 }
 
 #[derive(Default)]
@@ -120,5 +121,76 @@ impl Debug for ConfigurationDescriptorPack {
                self.interface1,
                self.hid1,
                self.endpoint1)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DescriptorSet {
+    descriptor_ptr: *mut u8,
+    index: usize,
+    len: usize,
+}
+
+impl DescriptorSet {
+    pub fn new(descriptor_ptr: *mut u8, len: usize) -> Self {
+        Self {
+            descriptor_ptr,
+            index: 0,
+            len,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Descriptor {
+    Configuration(ConfigurationDescriptor),
+    Interface(InterfaceDescriptor),
+    Endpoint(EndpointDescriptor),
+    Hid(HIDDescriptor),
+    NotSupport,
+}
+
+impl Iterator for DescriptorSet {
+    type Item = Descriptor;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len <= self.index {
+            return None;
+        }
+
+        let ptr = unsafe { self.descriptor_ptr.add(self.index) };
+        let (descriptor_size, descriptor) = unsafe { parse_descriptor(ptr) };
+        self.index += descriptor_size;
+
+        Some(descriptor)
+    }
+}
+
+unsafe fn parse_descriptor(ptr: *mut u8) -> (usize, Descriptor) {
+    let descriptor_type = *ptr.add(1);
+
+    fn convert<T>(ptr: *mut u8) -> (usize, T) {
+        (size_of::<T>(), unsafe { (ptr as *const T).read_volatile() })
+    }
+
+    match descriptor_type {
+        2 => {
+            let (size, descriptor) = convert::<ConfigurationDescriptor>(ptr);
+            (size, Descriptor::Configuration(descriptor))
+        }
+        4 => {
+            let (size, descriptor) = convert::<InterfaceDescriptor>(ptr);
+            (size, Descriptor::Interface(descriptor))
+        }
+        5 => {
+            let (size, descriptor) = convert::<EndpointDescriptor>(ptr);
+
+            (size, Descriptor::Endpoint(descriptor))
+        }
+        33 => {
+            let (size, descriptor) = convert::<HIDDescriptor>(ptr);
+            (size, Descriptor::Hid(descriptor))
+        }
+        _ => (0, Descriptor::NotSupport),
     }
 }

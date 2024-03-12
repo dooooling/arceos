@@ -13,7 +13,7 @@ pub struct TransferRing {
 impl TransferRing {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            buf: GenericTrb::aligned_vec(16, capacity),
+            buf: GenericTrb::aligned_vec(64, capacity),
             cycle_bit: true,
             write_idx: 0,
         }
@@ -52,40 +52,74 @@ impl From<SetupStage> for GenericTrb {
 }
 
 impl SetupStage {
-    pub(crate) fn get_descriptor(desc_type: u16, desc_index: u16, buf_len: u32) -> Self {
+    pub(crate) fn get_descriptor(desc_type: u16, desc_index: u16, buf_len: u16) -> Self {
+        let mut setup_stage = SetupStage::new();
+        // request type
+        setup_stage.set_request_type(0b10000000);
+        // request
+        setup_stage.set_request(6);
+        // value
+        setup_stage.set_value((desc_type << 8 | desc_index));
+        // index
+        setup_stage.set_index(0);
+        // buf len
+        setup_stage.set_length(buf_len);
+        // transfer type
+        setup_stage.set_transfer_type(3);
+        setup_stage
+    }
+
+    pub fn new() -> Self {
         let mut trb = GenericTrb::default();
         trb.set_trb_type(TrbType::SetupStage);
-        // request type
-        trb.data_low = 0b10000000;
-        // request
-        trb.data_low |= 6 << 8;
-        // value
-        trb.data_low |= ((desc_type << 8 | desc_index) as u32) << 16;
-        // index
-        trb.data_high = 0;
-        // buf len
-        trb.data_high = buf_len << 16;
-        // trb len
-        trb.status = 8;
-        // idt
-        trb.control |= 1 << 6;
-        // transfer type
-        trb.control |= 3 << 16;
-        Self(trb)
+
+        let mut val = Self(trb);
+        val.set_idt(true);
+        val.set_trb_transfer_length();
+        val
+    }
+    pub fn set_idt(&mut self, idt: bool) {
+        let idt = if idt { 1 } else { 0 };
+        self.0.control |= idt << 6;
+    }
+    pub fn set_trb_transfer_length(&mut self) {
+        self.0.status |= 8;
+    }
+    pub fn set_request_type(&mut self, request_type: u8) {
+        self.0.data_low |= request_type as u32;
+    }
+    pub fn set_request(&mut self, request: u8) {
+        self.0.data_low |= (request as u32) << 8;
+    }
+    pub fn set_value(&mut self, value: u16) {
+        self.0.data_low |= (value as u32) << 16;
+    }
+    pub fn set_index(&mut self, index: u16) {
+        self.0.data_high |= index as u32;
+    }
+    pub fn set_length(&mut self, length: u16) {
+        self.0.data_high |= (length as u32) << 16;
+    }
+    pub fn set_interrupter_target(&mut self, interrupter_target: u16) {
+        self.0.status |= (interrupter_target as u32) << 22;
+    }
+    pub fn set_transfer_type(&mut self, transfer_type: u8) {
+        let transfer_type = transfer_type & 0b11;
+        self.0.control |= (transfer_type as u32) << 16;
     }
 }
 
 pub struct DataStage(GenericTrb);
 
 impl DataStage {
-    pub fn data_stage(buf_addr: u64, buf_len: u32, direction: u8, interrupt_on_completion: u8) -> Self {
+    pub fn data_stage(buf_addr: u64, buf_len: u16, direction: u8, interrupt_on_completion: u8) -> Self {
         let mut trb = GenericTrb::default();
         trb.set_trb_type(TrbType::DataStage);
         // buf addr
         trb.data_low = (buf_addr & 0xFFFFFFFF) as u32;
         trb.data_high = (buf_addr >> 32) as u32;
         // trb len
-        trb.status = buf_len & 0x1FFFF;
+        trb.status = buf_len as u32 & 0x1FFFF;
         // td size
         trb.status |= 0 << 17;
         // dir
@@ -111,18 +145,24 @@ impl From<DataStage> for GenericTrb {
 pub struct StatusStage(GenericTrb);
 
 impl StatusStage {
-    pub fn status_stage() -> Self {
+    pub fn new() -> Self {
         let mut trb = GenericTrb::default();
         trb.set_trb_type(TrbType::StatusStage);
-        // dir
-        trb.control |= 1 << 16;
         Self(trb)
+    }
+
+    pub fn set_interrupt_on_completion(&mut self, interrupt_on_completion: bool) {
+        self.0.control |= if interrupt_on_completion { 1 } else { 0 } << 5;
+    }
+    pub fn set_direction(&mut self, direction: u8) {
+        let direction = direction & 0b1;
+        self.0.control |= (direction as u32) << 16;
     }
 }
 
 impl Default for StatusStage {
     fn default() -> Self {
-        Self(GenericTrb::default())
+        Self::new()
     }
 }
 

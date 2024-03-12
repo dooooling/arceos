@@ -1,15 +1,16 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Add;
 use core::ptr::NonNull;
 
 use log::debug;
-use tock_registers::interfaces::{Readable, Writeable};
+use tock_registers::interfaces::{Readable, ReadWriteable, Writeable};
 
 use crate::device::context::DeviceContext;
 use crate::registers::capability::{
     Capability, CAPABILITY_DW1, HCCPARAMS1, HCSPARAMS1, HCSPARAMS2, RTSOFF,
 };
-use crate::registers::operational::{CONFIG, CRCR, Operational, USBCMD, USBSTS};
+use crate::registers::operational::{CONFIG, CRCR, DCBAAP, Operational, USBCMD, USBSTS};
 use crate::registers::runtime::{IMAN, IMOD, Runtime};
 use crate::registers::runtime::ERDP::ERDP;
 use crate::registers::runtime::ERSTBA::ERSTBA;
@@ -73,23 +74,24 @@ impl Registers {
     pub fn set_max_slot_enable(&self, max_slot: u32) {
         self.operational()
             .config
-            .write(CONFIG::MAXSLOTEN.val(max_slot));
+            .modify(CONFIG::MAXSLOTEN.val(max_slot));
     }
 
     pub fn set_command_ring(&self, ring: &CommandRing) {
         let operational = self.operational();
-        operational.crcr.write(CRCR::RCS.val(ring.cycle_bit as u64));
+        operational.crcr.modify(CRCR::RCS.val(ring.cycle_bit as u64));
         // operational.crcr.write(CRCR::CS.val(0));
         // operational.crcr.write(CRCR::CA.val(0));
-        operational.crcr.write(
+        // operational.crcr.write(CRCR::RCS.val(ring.cycle_bit as u64).add(CRCR::CRP.val((virt_to_phys(ring.buf.as_slice().as_ptr() as usize) as u64) >> 6)));
+        operational.crcr.modify(
             CRCR::CRP.val((virt_to_phys(ring.buf.as_slice().as_ptr() as usize) as u64) >> 6),
         );
     }
 
-    pub fn set_device_context_base_address_array(&self, dcbaa: &Vec<u64>) {
+    pub fn set_device_context_base_address_array(&self, addr: usize) {
         self.operational()
             .dcbaap
-            .set(virt_to_phys(dcbaa.as_slice().as_ptr() as usize) as u64 >> 6);
+            .modify(DCBAAP::PONITER.val(virt_to_phys(addr) as u64 >> 6));
     }
     // pub fn set_device_context_base_address_array(&self, erst: &Vec<EventRingSegmentTableEntry>) {
     //     self.operational.dcbaap.set(dcbaap);
@@ -101,17 +103,17 @@ impl Registers {
         let primary_interrupter = &runtime.ints[0];
         primary_interrupter
             .erstsz
-            .write(ERSTSZ.val(ers_table.len() as u32));
+            .modify(ERSTSZ.val(ers_table.len() as u32));
         primary_interrupter
             .erdp
-            .write(ERDP.val(ers_table.entry_addr(0) >> 4));
+            .modify(ERDP.val(ers_table.entry_addr(0) >> 4));
         primary_interrupter
             .erstba
-            .write(ERSTBA.val((virt_to_phys(ers_table.addr()) >> 6) as u64));
+            .modify(ERSTBA.val((virt_to_phys(ers_table.addr()) >> 6) as u64));
 
-        primary_interrupter.imod.write(IMOD::IMODI.val(4000));
-        primary_interrupter.iman.write(IMAN::IP::SET);
-        primary_interrupter.iman.write(IMAN::IE::SET);
+        primary_interrupter.imod.modify(IMOD::IMODI.val(4000));
+        primary_interrupter.iman.modify(IMAN::IP::SET);
+        primary_interrupter.iman.modify(IMAN::IE::SET);
     }
 
     pub fn get_erdp(&self) -> u64 {
@@ -123,27 +125,27 @@ impl Registers {
     pub fn set_erdp(&self, erdp: u64) {
         let runtime = self.runtime();
         let primary_interrupter = &runtime.ints[0];
-        primary_interrupter.erdp.write(ERDP.val(erdp));
+        primary_interrupter.erdp.modify(ERDP.val(erdp));
     }
 
     pub fn reset(&self) {
         let operational = self.operational();
-        operational.usbcmd.write(USBCMD::RS::CLEAR);
-        operational.usbcmd.write(USBCMD::INTE::CLEAR);
-        operational.usbcmd.write(USBCMD::HSEE::CLEAR);
-        operational.usbcmd.write(USBCMD::EWE::CLEAR);
+        operational.usbcmd.modify(USBCMD::RS::CLEAR);
+        operational.usbcmd.modify(USBCMD::INTE::CLEAR);
+        operational.usbcmd.modify(USBCMD::HSEE::CLEAR);
+        operational.usbcmd.modify(USBCMD::EWE::CLEAR);
         while operational.usbsts.read(USBSTS::HCH) == 0 {}
         debug!("xhci controller stopped!");
 
-        operational.usbcmd.write(USBCMD::HCRST::SET);
+        operational.usbcmd.modify(USBCMD::HCRST::SET);
         while operational.usbsts.read(USBSTS::CNR) != 0 {}
         debug!("xhci controller reseted!");
     }
 
     pub fn run(&self) {
         let operational = self.operational();
-        operational.usbcmd.write(USBCMD::INTE::SET);
-        operational.usbcmd.write(USBCMD::RS::SET);
+        operational.usbcmd.modify(USBCMD::INTE::SET);
+        operational.usbcmd.modify(USBCMD::RS::SET);
         while operational.usbsts.read(USBSTS::HCH) != 0 {}
         debug!("xhci controller started!");
     }

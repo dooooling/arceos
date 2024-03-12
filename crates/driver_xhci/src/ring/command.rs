@@ -35,13 +35,23 @@ impl CommandRing {
         self.push_command(trb);
     }
 
-    pub fn push_address_device_command(&mut self, input_context_pointer: u64, slot_id: u8) {
-        assert_eq!((input_context_pointer & 0xF), 0);
+    pub fn push_address_device_command(&mut self, input_context_addr: u64, slot_id: u8) {
+        assert_eq!((input_context_addr & 0xF), 0);
         let mut trb = GenericTrb::default();
         trb.set_trb_type(TrbType::AddressDevice);
         trb.set_pcs(self.cycle_bit);
-        trb.set_pointer(input_context_pointer);
+        trb.set_pointer(input_context_addr);
         trb.set_slot_id(slot_id);
+        self.push_command(trb);
+    }
+
+    pub fn push_configure_endpoint_command(&mut self, input_context_addr: u64, slot_id: u8) {
+        assert_eq!((input_context_addr & 0x3F), 0);
+        let mut trb = GenericTrb::default();
+        trb.set_trb_type(TrbType::ConfigureEndpoint);
+        trb.set_slot_id(slot_id);
+        // trb.set_pointer(input_context_addr);
+        trb.set_pcs(self.cycle_bit);
         self.push_command(trb);
     }
 

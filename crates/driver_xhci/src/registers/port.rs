@@ -1,7 +1,7 @@
 use core::ptr::NonNull;
 
 use tock_registers::{register_bitfields, register_structs};
-use tock_registers::interfaces::{Readable, Writeable};
+use tock_registers::interfaces::{Readable, ReadWriteable, Writeable};
 use tock_registers::registers::ReadWrite;
 
 use crate::registers::port;
@@ -21,9 +21,9 @@ impl Port {
         self.portsc.read(port::PORTSC::CCS) == 1
     }
     pub fn reset(&self) {
-        self.portsc.write(PORTSC::PR.val(1));
+        self.portsc.modify(PORTSC::PR.val(1));
         // self.portsc.write(PORTSC::PED.val(1));
-        self.portsc.write(PORTSC::WCE.val(1));
+        self.portsc.modify(PORTSC::WCE.val(1));
         while self.portsc.read(PORTSC::PR) == 1 {}
     }
 
@@ -80,7 +80,7 @@ impl PortSet {
     }
 
     pub fn enable_port(&self, port_id: u8) {
-        unsafe { self.addr.add(Self::id_to_index(port_id)).read().portsc.write(PORTSC::PRC::SET); }
+        unsafe { self.addr.add(Self::id_to_index(port_id)).read().portsc.modify(PORTSC::PRC::SET); }
     }
 
     pub fn id_to_index(id: u8) -> usize {

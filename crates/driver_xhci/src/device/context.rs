@@ -4,8 +4,8 @@ use core::alloc::Layout;
 #[repr(C, align(64))]
 #[derive(Default, Clone, Debug)]
 pub struct DeviceContext {
-    pub slot: SlotContext,
-    pub endpoints: [EndpointContext; 31],
+    pub slot_ctx: SlotContext,
+    pub ep_ctxs: [EndpointContext; 31],
 }
 
 impl DeviceContext {
@@ -62,6 +62,16 @@ pub struct EndpointContext {
 }
 
 impl EndpointContext {
+    pub fn aligned_vec(capacity: usize) -> Vec<EndpointContext> {
+        unsafe {
+            let layout = Layout::array::<EndpointContext>(capacity).unwrap().align_to(32).unwrap();
+            let addr = alloc::alloc::alloc(layout).cast();
+            Vec::from_raw_parts(addr, capacity, capacity)
+        }
+    }
+    pub fn set_endpoint_state(&mut self, endpoint_state: u8) {
+        self.a |= (endpoint_state & 0b111) as u32;
+    }
     pub fn set_endpoint_type(&mut self, ep_type: u8) {
         self.b |= ((ep_type as u32) & 0x7) << 3
     }
@@ -93,6 +103,9 @@ impl EndpointContext {
     pub fn set_error_count(&mut self, count: u8) {
         self.b |= ((count as u32) & 0x3) << 1
     }
+    pub fn set_average_trb_length(&mut self, average_trb_length: u16) {
+        self.c |= average_trb_length as u32
+    }
 }
 
 #[repr(C, align(64))]
@@ -100,10 +113,10 @@ impl EndpointContext {
 pub struct InputContext {
     input_control_ctx: InputControlContext,
     slot_ctx: SlotContext,
-    ep_ctxs: [EndpointContext; 31],
+    pub ep_ctxs: [EndpointContext; 31],
 }
 
-#[repr(C, align(16))]
+#[repr(C, align(32))]
 #[derive(Default, Debug, Clone)]
 struct InputControlContext {
     drop_context_flags: u32,
@@ -117,16 +130,20 @@ struct InputControlContext {
 
 
 impl InputContext {
+    pub fn clear_add_context(&mut self) {
+        self.input_control_ctx.add_context_flags = 0;
+    }
+
     /// fix
     pub fn set_add_context(&mut self, index: u32, val: u32) {
-        self.input_control_ctx.add_context_flags &= val << index;
+        self.input_control_ctx.add_context_flags |= (val << index);
     }
 
     pub fn enable_slot_context(&mut self) {
         self.input_control_ctx.add_context_flags |= 1;
     }
 
-    pub fn init_default_control_endpoint(&mut self, max_packet_size: u16, ring_addr: u64) {
+    pub(crate) fn init_default_control_endpoint(&mut self, max_packet_size: u16, ring_addr: u64) {
         self.input_control_ctx.add_context_flags |= 1 << 1;
         let ep = &mut self.ep_ctxs[0];
         ep.set_endpoint_type(4);

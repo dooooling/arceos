@@ -8,12 +8,12 @@ extern crate alloc;
 use alloc::borrow::ToOwned;
 
 use log::{debug, error, info, warn};
-use tock_registers::interfaces::{Readable, Writeable};
+use tock_registers::interfaces::{Readable, ReadWriteable, Writeable};
 
 use driver_common::{BaseDriverOps, DeviceType};
 
 use crate::device::{Device, DeviceManager, InitPhase};
-use crate::device::context::{DeviceContext, InputContext};
+use crate::device::context::{DeviceContext, InputContext, SlotContext};
 use crate::device::descriptor::DeviceDescriptor;
 use crate::registers::{port, Registers};
 use crate::registers::capability::DBOFF;
@@ -106,8 +106,8 @@ impl XhciController {
                             let port_id = port_status_change.port_id();
                             port_set.enable_port(port_id);
                             command_ring.push_enable_slot_command();
-                            device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
-                            device_manager.doorbells().doorbell.write(DOORBELL::DB_STREAM_ID.val(0));
+                            device_manager.doorbells().doorbell.modify(DOORBELL::DB_TARGET.val(0));
+                            device_manager.doorbells().doorbell.modify(DOORBELL::DB_STREAM_ID.val(0));
                             device_manager.set_addressing_port(port_id);
                         }
                         TrbType::CommandCompletion => {
@@ -125,38 +125,27 @@ impl XhciController {
                                             let slot_id = command_completion.slot_id();
                                             error!("slot id {:?}",slot_id);
                                             assert!(slot_id > 0 && slot_id < device_manager.devices().capacity() as u8, "invalid slot id");
-                                            let mut device_context = DeviceContext::default();
-                                            let mut input_context = InputContext::default();
 
+
+                                            info!("{:?}",device_manager.devices().get(slot_id as usize));
                                             if device_manager.devices().get(slot_id as usize).unwrap().is_some() {
                                                 panic!("device already allocated!");
                                             }
-
-                                            input_context.enable_slot_context();
-                                            let slot = input_context.mut_slot();
+                                            let mut device = device_manager.enable_device(slot_id as usize);
+                                            error!("device address {:#X?}",(device as *const Device).addr());
+                                            device.input_context.enable_slot_context();
+                                            let slot = device.input_context.mut_slot();
                                             slot.set_route_string(0);
                                             slot.set_root_hub_number(port_id);
                                             slot.set_context_entries(1);
                                             slot.set_speed(port.speed());
 
-                                            let transfer_ring = TransferRing::with_capacity(32);
-                                            input_context.init_default_control_endpoint(port.max_packet_size() as u16, virt_to_phys(transfer_ring.buf.as_ptr().addr()) as u64);
+                                            device.init_default_control_endpoint(port.max_packet_size() as u16);
 
-                                            device_manager.set_context(slot_id as usize, virt_to_phys(((&mut device_context) as *mut DeviceContext).addr()) as u64);
-                                            command_ring.push_address_device_command(virt_to_phys((&input_context as *const InputContext).addr()) as u64, slot_id);
-                                            let device = Device {
-                                                slot_id,
-                                                input_context,
-                                                device_context,
-                                                doorbell: device_manager.doorbell_at(slot_id as usize),
-                                                transfer_ring,
-                                                device_descriptor_buf: [0; 256],
-                                                init_phase: InitPhase::Uninitialized,
-                                            };
-                                            device_manager.set_device(slot_id as usize, device);
+                                            command_ring.push_address_device_command(virt_to_phys((&device.input_context as *const InputContext).addr()) as u64, slot_id);
 
-                                            device_manager.doorbells().doorbell.write(DOORBELL::DB_TARGET.val(0));
-                                            device_manager.doorbells().doorbell.write(DOORBELL::DB_STREAM_ID.val(0));
+                                            device_manager.doorbells().doorbell.modify(DOORBELL::DB_TARGET.val(0));
+                                            device_manager.doorbells().doorbell.modify(DOORBELL::DB_STREAM_ID.val(0));
                                         }
                                         None => {
                                             warn!("addressing port is None");
@@ -179,13 +168,20 @@ impl XhciController {
                                     let addr = phys_to_virt(trb.command_trb_pointer() as usize);
                                     let trb = &*(addr as *mut GenericTrb);
                                     info!("transfer trb type: {:?}",trb.trb_type());
+                                    device_manager.process_transfer_event(&transfer_event);
+                                    let slot_id = transfer_event.slot_id() as usize;
                                     let device = device_manager
                                         .devices_mut()
                                         .get_mut(transfer_event.slot_id() as usize)
                                         .unwrap()
                                         .as_mut()
                                         .unwrap();
-                                    device_manager.process_transfer_event(transfer_event.slot_id() as usize);
+                                    if let InitPhase::WaitConfiguraCommand = device.init_phase {
+                                        device.init_phase = InitPhase::Finish;
+                                        command_ring.push_configure_endpoint_command(virt_to_phys((&device.input_context as *const InputContext).addr()) as u64, slot_id as u8);
+                                        device_manager.doorbells().doorbell.modify(DOORBELL::DB_TARGET.val(0));
+                                        device_manager.doorbells().doorbell.modify(DOORBELL::DB_STREAM_ID.val(0));
+                                    }
                                 }
                                 _ => {}
                             }

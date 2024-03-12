@@ -13,7 +13,7 @@ pub struct EventRing {
     pub write_idx: usize,
 }
 
-impl GenericTrb{
+impl GenericTrb {
     pub fn completion_code(&self) -> u8 {
         (self.status >> 24) as u8
     }
@@ -21,6 +21,7 @@ impl GenericTrb{
         self.data_low as u64 | (self.data_high as u64) << 32
     }
 }
+
 impl EventRing {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -62,7 +63,6 @@ impl PortStatusChangeEvent {
     pub fn port_id(&self) -> u8 {
         (self.0.data_low >> 24) as u8
     }
-
 }
 
 impl Debug for PortStatusChangeEvent {
@@ -118,6 +118,9 @@ impl TransferEvent {
     }
     pub fn trb_pointer(&self) -> u64 {
         self.0.data_low as u64 | (self.0.data_high as u64) << 32
+    }
+    pub fn transfer_length(&self) -> u32 {
+        self.0.status & 0x00FFFFFF
     }
 }
 
