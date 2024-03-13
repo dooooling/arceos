@@ -12,7 +12,7 @@ use crate::registers::capability::{
 };
 use crate::registers::operational::{CONFIG, CRCR, DCBAAP, Operational, USBCMD, USBSTS};
 use crate::registers::runtime::{IMAN, IMOD, Runtime};
-use crate::registers::runtime::ERDP::ERDP;
+use crate::registers::runtime::ERDP::{EHB, ERDP};
 use crate::registers::runtime::ERSTBA::ERSTBA;
 use crate::registers::runtime::ERSTSZ::ERSTSZ;
 use crate::ring::command::CommandRing;
@@ -126,6 +126,7 @@ impl Registers {
         let runtime = self.runtime();
         let primary_interrupter = &runtime.ints[0];
         primary_interrupter.erdp.modify(ERDP.val(erdp));
+        primary_interrupter.erdp.modify(EHB.val(0));
     }
 
     pub fn reset(&self) {

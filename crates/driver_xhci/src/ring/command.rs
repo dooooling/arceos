@@ -50,7 +50,7 @@ impl CommandRing {
         let mut trb = GenericTrb::default();
         trb.set_trb_type(TrbType::ConfigureEndpoint);
         trb.set_slot_id(slot_id);
-        // trb.set_pointer(input_context_addr);
+        trb.set_pointer(input_context_addr);
         trb.set_pcs(self.cycle_bit);
         self.push_command(trb);
     }
@@ -66,6 +66,7 @@ impl CommandRing {
     fn back_to_head(&mut self) {
         let mut link_trb = LinkTrb::new(virt_to_phys(self.buf.as_ptr().addr()));
         link_trb.set_tc(true);
+        link_trb.0.set_pcs(self.cycle_bit);
         self.buf[self.write_idx] = link_trb.cast_trb();
         self.write_idx = 0;
         self.cycle_bit = !self.cycle_bit;

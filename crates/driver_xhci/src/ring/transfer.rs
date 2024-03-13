@@ -30,20 +30,45 @@ impl TransferRing {
     fn back_to_head(&mut self) {
         let mut link_trb = LinkTrb::new(virt_to_phys(self.buf.as_ptr().addr()));
         link_trb.set_tc(true);
+        link_trb.0.set_pcs(self.cycle_bit);
         self.buf[self.write_idx] = link_trb.cast_trb();
         self.write_idx = 0;
         self.cycle_bit = !self.cycle_bit;
     }
 }
 
+pub struct Normal(GenericTrb);
+
+impl Normal {
+    pub fn new() -> Self {
+        let mut generic_trb = GenericTrb::default();
+        generic_trb.set_trb_type(TrbType::Normal);
+        Self(generic_trb)
+    }
+
+    pub fn set_data_buffer_pointer(&mut self, data_buffer_pointer: u64) {
+        self.0.data_low |= (data_buffer_pointer & 0xFFFFFFFF) as u32;
+        self.0.data_high |= (data_buffer_pointer >> 32) as u32;
+    }
+    pub fn set_interrupt_on_short_packet(&mut self, interrupt_on_short_packet: bool) {
+        self.0.control |= if interrupt_on_short_packet { 1 << 2 } else { 0 << 2 };
+    }
+    pub fn set_trb_transfer_length(&mut self, trb_transfer_length: u32) {
+        self.0.status |= trb_transfer_length;
+    }
+    pub fn set_interrupt_on_completion(&mut self, interrupt_on_completion: bool) {
+        self.0.control |= if interrupt_on_completion { 1 } else { 0 } << 5;
+    }
+}
+
+impl From<Normal> for GenericTrb {
+    fn from(value: Normal) -> Self {
+        value.0
+    }
+}
 
 pub struct SetupStage(GenericTrb);
 
-impl Default for SetupStage {
-    fn default() -> Self {
-        Self(GenericTrb::default())
-    }
-}
 
 impl From<SetupStage> for GenericTrb {
     fn from(value: SetupStage) -> Self {
@@ -130,12 +155,6 @@ impl DataStage {
     }
 }
 
-impl Default for DataStage {
-    fn default() -> Self {
-        Self(GenericTrb::default())
-    }
-}
-
 impl From<DataStage> for GenericTrb {
     fn from(value: DataStage) -> Self {
         value.0
@@ -157,12 +176,6 @@ impl StatusStage {
     pub fn set_direction(&mut self, direction: u8) {
         let direction = direction & 0b1;
         self.0.control |= (direction as u32) << 16;
-    }
-}
-
-impl Default for StatusStage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

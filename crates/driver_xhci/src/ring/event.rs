@@ -37,7 +37,7 @@ impl EventRing {
             return None;
         }
         self.write_idx += 1;
-        if self.write_idx == self.buf.len() {
+        if self.write_idx  == self.buf.len() {
             self.write_idx = 0;
             self.cycle_bit = !self.cycle_bit;
         }

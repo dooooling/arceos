@@ -155,6 +155,15 @@ impl XhciController {
                                 TrbType::AddressDevice => {
                                     device_manager.init_device(command_completion.slot_id() as _);
                                 }
+                                TrbType::ConfigureEndpoint => {
+                                    let device = device_manager
+                                        .devices_mut()
+                                        .get_mut(command_completion.slot_id() as usize)
+                                        .unwrap()
+                                        .as_mut()
+                                        .unwrap();
+                                    device.on_endpoints_configured();
+                                }
                                 _ => {
                                     error!("unimplemented command completion event : {:?}!", cmd_trb.trb_type());
                                 }
@@ -176,8 +185,8 @@ impl XhciController {
                                         .unwrap()
                                         .as_mut()
                                         .unwrap();
-                                    if let InitPhase::WaitConfiguraCommand = device.init_phase {
-                                        device.init_phase = InitPhase::Finish;
+                                    if let InitPhase::WaitConfigureCommand(dci) = device.init_phase {
+                                        device.init_phase = InitPhase::Finish(dci);
                                         command_ring.push_configure_endpoint_command(virt_to_phys((&device.input_context as *const InputContext).addr()) as u64, slot_id as u8);
                                         device_manager.doorbells().doorbell.modify(DOORBELL::DB_TARGET.val(0));
                                         device_manager.doorbells().doorbell.modify(DOORBELL::DB_STREAM_ID.val(0));

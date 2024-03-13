@@ -12,7 +12,7 @@ use crate::device::context::{DeviceContext, InputContext, SlotContext};
 use crate::device::descriptor::{ConfigurationDescriptor, ConfigurationDescriptorPack, Descriptor, DescriptorSet, DeviceDescriptor, InterfaceDescriptor};
 use crate::registers::doorbell::{Doorbell, DOORBELL};
 use crate::ring::event::TransferEvent;
-use crate::ring::transfer::{DataStage, SetupStage, StatusStage, TransferRing};
+use crate::ring::transfer::{DataStage, Normal, SetupStage, StatusStage, TransferRing};
 use crate::virt_to_phys;
 
 pub mod context;
@@ -116,8 +116,8 @@ pub enum InitPhase {
     GetDeviceDescriptor,
     GetConfigurationDescriptor,
     SetConfiguration,
-    WaitConfiguraCommand,
-    Finish,
+    WaitConfigureCommand(u8),
+    Finish(u8),
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +131,7 @@ pub struct Device {
     pub(crate) init_phase: InitPhase,
     pub(crate) descriptor_set: Option<DescriptorSet>,
     pub(crate) transfer_rings: Vec<Option<TransferRing>>,
+    pub(crate) receive_data_buf: [u8; 16],
 }
 
 impl Device {
@@ -146,6 +147,7 @@ impl Device {
             init_phase: InitPhase::Uninitialized,
             descriptor_set: None,
             transfer_rings: vec![None; 32],
+            receive_data_buf: [0; 16],
         }
     }
     fn control_transfer_ring(&mut self) -> &mut TransferRing {
@@ -188,9 +190,22 @@ impl Device {
                     self.descriptor_set = Some(descriptor_set);
                 }
             }
-            InitPhase::Finish => { error!("{:?}",InitPhase::Finish) }
+            InitPhase::Finish(dci) => unsafe {
+                info!("{:?}",self.receive_data_buf);
+                let mut normal = Normal::new();
+                normal.set_data_buffer_pointer(virt_to_phys(self.receive_data_buf.as_mut_ptr().addr()) as u64);
+                normal.set_interrupt_on_short_packet(true);
+                normal.set_trb_transfer_length(self.receive_data_buf.len() as u32);
+                normal.set_interrupt_on_completion(true);
+
+                let transfer_ring = self.get_transfer_ring(dci as usize);
+                transfer_ring.push_command(normal.into());
+
+                self.doorbell.as_mut().doorbell.modify(DOORBELL::DB_STREAM_ID.val(0));
+                self.doorbell.as_mut().doorbell.modify(DOORBELL::DB_TARGET.val(dci as u32));
+            }
             InitPhase::SetConfiguration => { error!("{:?}",InitPhase::SetConfiguration) }
-            InitPhase::WaitConfiguraCommand => { error!("{:?}",InitPhase::WaitConfiguraCommand) }
+            InitPhase::WaitConfigureCommand(dci) => { error!("{:?}",InitPhase::WaitConfigureCommand(dci)) }
         }
     }
     fn get_device_descriptor(&mut self) {
@@ -214,6 +229,22 @@ impl Device {
         self.control_transfer_ring().push_command(status_stage.into());
         self.ring();
         self.init_phase = InitPhase::GetConfigurationDescriptor;
+    }
+
+    pub fn on_endpoints_configured(&mut self) {
+        //设置引导协议
+        let mut setup_stage = SetupStage::new();
+        setup_stage.set_value(0);
+        setup_stage.set_request_type(0b00100001);
+        setup_stage.set_request(11);
+        setup_stage.set_index(0);
+        self.control_transfer_ring().push_command(setup_stage.into());
+
+        let mut status_stage = StatusStage::new();
+        status_stage.set_direction(1);
+        status_stage.set_interrupt_on_completion(true);
+        self.control_transfer_ring().push_command(status_stage.into());
+        self.ring();
     }
 
     fn configuration(&mut self, transfer_event: &TransferEvent) {
@@ -274,7 +305,7 @@ impl Device {
         self.input_context.set_add_context(dci as u32, 1);
         let transfer_ring = self.get_transfer_ring(dci as _);
         let ring_buf_addr = virt_to_phys(transfer_ring.buf.as_ptr().addr()) as u64;
-        let endpoint = self.input_context.ep_ctxs.get_mut((dci - 1 )as usize).unwrap();
+        let endpoint = self.input_context.ep_ctxs.get_mut((dci - 1) as usize).unwrap();
 
 
         endpoint.set_max_packet_size(endpoint_desc.w_max_packet_size);
@@ -285,7 +316,7 @@ impl Device {
         endpoint.set_transfer_ring_buffer(ring_buf_addr);
         endpoint.set_endpoint_type(7);
         endpoint.set_dequeue_cycle_state(1);
-        self.init_phase = InitPhase::WaitConfiguraCommand;
+        self.init_phase = InitPhase::WaitConfigureCommand(dci);
     }
     fn ring(&mut self) {
         unsafe {

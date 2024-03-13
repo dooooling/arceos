@@ -84,8 +84,9 @@ pub struct LinkTrb(GenericTrb);
 impl LinkTrb {
     pub fn new(addr: usize) -> Self {
         let mut trb = GenericTrb::default();
+        trb.set_trb_type(TrbType::Link);
         trb.data_low = (addr as u32) & 0xFFFFFFF0;
-        trb.data_low = (addr >> 32) as u32;
+        trb.data_high = (addr >> 32) as u32;
         Self(trb)
     }
     pub fn cast_trb(self) -> GenericTrb {
