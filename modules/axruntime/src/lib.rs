@@ -149,6 +149,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     info!("Initialize platform devices...");
     axhal::platform_init();
     for i in 0x23..0x38 {
+        info!("{i}");
         axhal::irq::set_enable(i, true);
     }
 

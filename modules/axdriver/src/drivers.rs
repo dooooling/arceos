@@ -4,16 +4,16 @@
 
 use axalloc::{global_allocator, GlobalAllocator};
 use driver_common::DeviceType;
-use driver_pci::capability::PciCapabilityIterator;
 use driver_pci::{Command, Status};
 #[cfg(feature = "bus-pci")]
 use driver_pci::{DeviceFunction, DeviceFunctionInfo, PciRoot};
+use driver_pci::capability::PciCapabilityIterator;
 use driver_virtio::pci;
 use driver_xhci::XhciController;
 
+use crate::AxDeviceEnum;
 #[cfg(feature = "virtio")]
 use crate::virtio::{self, VirtIoDevMeta};
-use crate::AxDeviceEnum;
 
 pub use super::dummy::*;
 
@@ -146,6 +146,7 @@ cfg_if::cfg_if! {
             ) -> Option<AxDeviceEnum> {
                 return match ( dev_info.class,dev_info.subclass,dev_info.prog_if){
                     (0xC, 0x3, 0x30)=>{
+
                         let bar_info = root.bar_info(bdf, 0).unwrap();
                         let (_status, _command) = root.get_status_command(bdf);
 
